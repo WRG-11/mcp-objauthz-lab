@@ -22,7 +22,8 @@ export class NotFoundError extends Error {}
 // token -> the (server-trusted) user it authenticates as.
 const TOKENS = new Map([
   ["alice-token", "u_alice"], // Alice, org Acme
-  ["bob-token", "u_bob"],     // Bob, org Globex
+  ["bob-token",   "u_bob"],   // Bob, org Globex
+  ["carol-token", "u_carol"], // Carol, org Initech
 ]);
 
 /**
@@ -34,12 +35,12 @@ export function resolveSession(store, token) {
   const userId = TOKENS.get(token);
   if (!userId) throw new AuthnError("invalid or missing token");
   const user = store.getUser(userId);
-  const org = store.getOrg(user.orgId);
+  const org  = store.getOrg(user.orgId);
   return {
-    userId: user.id,
+    userId:   user.id,
     userName: user.name,
-    orgId: org.id,
-    orgName: org.name,
+    orgId:    org.id,
+    orgName:  org.name,
   };
 }
 
