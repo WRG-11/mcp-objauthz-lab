@@ -1,13 +1,19 @@
-// MCP tool definitions.
+// MCP tool definitions — 4 independent BOLA scenarios.
 //
-// Six note tools (list / get / create / update / delete / search) plus a small
-// `whoami` helper. Five of the six object tools are correctly authorized:
-// every tool that resolves an object by its client-supplied id calls
-// requireOrgAccess() before returning or mutating it.
+// Tool inventory:
 //
-// EXACTLY ONE is not:  note_delete  (when LAB_MODE=vuln).
-// That single missing check is the whole lab. Read note_get and note_update
-// first, then note_delete — the only difference is the absent org-scope line.
+//   whoami          — echo session (user + org); no authz involved
+//   note_list       — inherently org-scoped; no BOLA
+//   note_get        — correctly authorized (compare: note_delete in S1 vuln)
+//   note_create     — creates inside caller's org; no foreign id
+//   note_update     — correctly authorized
+//   note_delete  ← S1 planted bug: missing requireOrgAccess() in vuln mode
+//   note_search  ← S2 planted bug: trusts caller-supplied org_id (scope-as-param)
+//   note_batch_get  ← S3 planted bug: resolves ids without per-object org check (list→get asymmetry)
+//   note_export  ← S4 planted bug: wildcard sentinel "* / all" bypasses org scope
+//
+// Each scenario is gated by its own mode flag (modes.s1..s4 = "vuln" | "fixed").
+// Scenarios are independent: you can set any combination to "fixed" to isolate one.
 
 import { z } from "zod";
 import {
@@ -51,10 +57,10 @@ const notFound = (id) => {
  * Register every tool on the server.
  * @param {import("@modelcontextprotocol/sdk/server/mcp.js").McpServer} server
  * @param {ReturnType<import("./store.js").createStore>} store
- * @param {"vuln"|"fixed"} mode
+ * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed" }} modes
  */
-export function registerTools(server, store, mode) {
-  // whoami — echoes the server-trusted session (handy to see token -> org).
+export function registerTools(server, store, modes) {
+  // whoami — echoes the server-trusted session (handy to verify token → org mapping).
   server.registerTool(
     "whoami",
     {
@@ -88,12 +94,12 @@ export function registerTools(server, store, mode) {
       const session = resolveSession(store, token);
       const note = store.getNote(id);
       if (!note) notFound(id);
-      requireOrgAccess(session, note); // org-scope check (present)
+      requireOrgAccess(session, note); // org-scope check (present — compare note_delete in S1 vuln)
       return ok(note);
     }),
   );
 
-  // note_create — creates inside the caller's org; no foreign id involved.
+  // note_create — creates inside the caller's org; no foreign object id involved.
   server.registerTool(
     "note_create",
     {
@@ -132,18 +138,14 @@ export function registerTools(server, store, mode) {
     }),
   );
 
-  // ── note_delete ───────────────────────────────────────────────────────────
-  // THE PLANTED BUG — object-level / cross-tenant BOLA (CWE-639 / CWE-862).
+  // ── S1: note_delete ───────────────────────────────────────────────────────
+  // THE ORIGINAL PLANTED BUG — object-level / cross-tenant BOLA (CWE-639 / CWE-862).
   //
-  // Compare with note_get and note_update directly above: all three resolve a
-  // note from a client-supplied `id`. Those two then call requireOrgAccess()
-  // to confirm the note belongs to the caller's org. note_delete does not — in
-  // LAB_MODE=vuln the org-scope line is missing, so ANY caller can delete ANY
-  // org's note simply by knowing (or guessing) its id.
+  // Compare with note_get and note_update above: all three resolve a note from a
+  // client-supplied `id`. Those two then call requireOrgAccess(). note_delete
+  // does not in vuln mode — ANY caller can delete ANY org's note by knowing its id.
   //
-  // The fix is the single line marked `// <-- THE FIX`: the very same check its
-  // sibling tools already perform. It is applied only in LAB_MODE=fixed so the
-  // PoC can demonstrate both states (vuln = exploit, fixed = blocked).
+  // The fix is the single line marked `// <-- THE FIX`.
   server.registerTool(
     "note_delete",
     {
@@ -154,22 +156,107 @@ export function registerTools(server, store, mode) {
       const session = resolveSession(store, token);
       const note = store.getNote(id);
       if (!note) notFound(id);
-      if (mode === "fixed") requireOrgAccess(session, note); // <-- THE FIX (absent in vuln mode)
+      if (modes.s1 === "fixed") requireOrgAccess(session, note); // <-- THE FIX (absent in vuln mode)
       store.deleteNote(note.id);
       return ok({ deleted: note.id, title: note.title });
     }),
   );
 
-  // note_search — cross-cutting query, scoped to the caller's org.
+  // ── S2: note_search ───────────────────────────────────────────────────────
+  // SCOPE-AS-PARAM BOLA (CWE-639).
+  //
+  // The tool accepts an optional `org_id` parameter that is documented as "admin use."
+  // In vuln mode the server trusts it unconditionally — any caller can set it to any
+  // other org's id and receive that org's notes.
+  //
+  //   Exploit: Alice (org_acme) calls note_search with org_id="org_globex" → Globex notes.
+  //
+  // In fixed mode the parameter is accepted in the schema (removing it would be a
+  // breaking API change) but silently ignored; session.orgId is always used.
   server.registerTool(
     "note_search",
     {
-      description: "Search your organization's notes by substring.",
-      inputSchema: { token: z.string(), q: z.string() },
+      description:
+        "Search notes by substring. The optional org_id parameter restricts the scope (admin use).",
+      inputSchema: {
+        token: z.string(),
+        q: z.string(),
+        org_id: z.string().optional(),
+      },
     },
-    guard(async ({ token, q }) => {
+    guard(async ({ token, q, org_id }) => {
       const session = resolveSession(store, token);
-      return ok(store.searchNotesByOrg(session.orgId, q));
+      // S2 vuln: trust caller-supplied org_id if present.
+      // S2 fixed: always use session.orgId (org_id ignored).
+      const effectiveOrgId =
+        modes.s2 === "vuln" && org_id ? org_id : session.orgId;
+      return ok(store.searchNotesByOrg(effectiveOrgId, q));
+    }),
+  );
+
+  // ── S3: note_batch_get ────────────────────────────────────────────────────
+  // LIST→GET ASYMMETRY BOLA (CWE-862).
+  //
+  // A common pattern: `note_list` is safely org-scoped, but `note_batch_get`
+  // accepts a list of explicit ids and resolves each one directly from storage
+  // without re-applying the org scope check. An attacker who knows (or guesses)
+  // note ids from another org can mix them into the batch and receive them.
+  //
+  //   Exploit: Alice knows n_acme_1 (her note). She also passes n_globex_1.
+  //            In vuln mode both are returned; she reads Globex's note.
+  //
+  // In fixed mode resolved notes are filtered to session.orgId before returning.
+  server.registerTool(
+    "note_batch_get",
+    {
+      description: "Fetch multiple notes by id in a single call (up to 20 ids).",
+      inputSchema: {
+        token: z.string(),
+        ids: z.array(z.string()).min(1).max(20),
+      },
+    },
+    guard(async ({ token, ids }) => {
+      const session = resolveSession(store, token);
+      const resolved = ids.map((id) => store.getNote(id)).filter(Boolean);
+      // S3 vuln: return all resolved notes with no org check.
+      // S3 fixed: filter to caller's org before returning.
+      const result =
+        modes.s3 === "vuln"
+          ? resolved
+          : resolved.filter((n) => n.orgId === session.orgId);
+      return ok(result);
+    }),
+  );
+
+  // ── S4: note_export ───────────────────────────────────────────────────────
+  // WILDCARD / SENTINEL BYPASS BOLA (CWE-639).
+  //
+  // The tool exports all notes for a given org. A magic sentinel value ("*" or
+  // "all") is supposed to be admin-only, but in vuln mode the server honors it
+  // from any caller — letting them dump every note from every tenant.
+  //
+  //   Exploit: Alice passes org_id="*" → receives notes from Acme, Globex, AND Initech.
+  //
+  // In fixed mode the org_id parameter is fully ignored and only the caller's org
+  // is exported, regardless of what value is supplied.
+  server.registerTool(
+    "note_export",
+    {
+      description:
+        "Export all notes for an organization. Pass org_id='*' for a global export (admin only).",
+      inputSchema: {
+        token: z.string(),
+        org_id: z.string().optional(),
+      },
+    },
+    guard(async ({ token, org_id }) => {
+      const session = resolveSession(store, token);
+      // S4 vuln: honor sentinel values from any caller.
+      // S4 fixed: ignore org_id entirely; always export caller's own org.
+      if (modes.s4 === "vuln" && (org_id === "*" || org_id === "all")) {
+        return ok(store.listAllNotes());
+      }
+      return ok(store.listNotesByOrg(session.orgId));
     }),
   );
 }
