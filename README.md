@@ -21,6 +21,18 @@ single tool and you have a cross-tenant read, write, or delete — regardless of
 how good the prompt-injection defenses are. Catching it takes *reading the
 authorization on each tool*, which is exactly the muscle this lab trains.
 
+## Try the challenges
+
+Four hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
+
+| Scenario | Pattern |
+|---|---|
+| [S1](challenges/s1.md) | Inconsistent authorization — find the single outlier |
+| [S2](challenges/s2.md) | Client-supplied scope trusted as authorization |
+| [S3](challenges/s3.md) | List→get asymmetry — batch skips per-object check |
+| [S4](challenges/s4.md) | Wildcard/sentinel value bypasses scope filter |
+
 ## Quickstart (< 5 minutes)
 
 Requirements: **Node.js ≥ 20**.
