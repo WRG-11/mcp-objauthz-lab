@@ -1,5 +1,7 @@
 # MCP Object-Authz Lab
 
+[![lab-integrity](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/ci.yml)
+
 > A small, self-hostable, **vulnerable-by-design** [MCP](https://modelcontextprotocol.io)
 > server for learning how **object-level / cross-tenant authorization** bugs
 > (BOLA / IDOR — [CWE-639](https://cwe.mitre.org/data/definitions/639.html),
