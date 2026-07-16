@@ -8,7 +8,7 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing nine MCP tools across **four independent
+It is a multi-tenant note server exposing eleven MCP tools across **six independent
 BOLA scenarios**. Each scenario is a different variant of the same bug class, toggled
 by its own environment variable. Run them all at once or isolate one at a time.
 
@@ -25,7 +25,7 @@ authorization on each tool*, which is exactly the muscle this lab trains.
 
 ## Try the challenges
 
-Four hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+Six hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
 until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
@@ -34,6 +34,8 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S2](challenges/s2.md) | Client-supplied scope trusted as authorization |
 | [S3](challenges/s3.md) | List→get asymmetry — batch skips per-object check |
 | [S4](challenges/s4.md) | Wildcard/sentinel value bypasses scope filter |
+| [S5](challenges/s5.md) | Role/token-type bypass — admin-named tool, no role check |
+| [S6](challenges/s6.md) | Foreign-parent injection — create trusts a caller-supplied org |
 
 ## Quickstart (< 5 minutes)
 
@@ -44,10 +46,10 @@ npm install
 npm run poc
 ```
 
-Expected output (10/10 rows, all scenarios):
+Expected output (15/15 rows, all scenarios):
 
 ```
-MCP object-level authorization lab — two-way gate (4 scenarios)
+MCP object-level authorization lab — two-way gate (6 scenarios)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -60,8 +62,13 @@ MCP object-level authorization lab — two-way gate (4 scenarios)
   S3   fixed  note_batch_get list→get asymm (Alice+Globex)   SCOPED    SCOPED    ✓
   S4   vuln   note_export  wildcard org_id='*' (Alice)       LEAKED    LEAKED    ✓
   S4   fixed  note_export  wildcard org_id='*' (Alice)       SCOPED    SCOPED    ✓
+  S5   vuln   note_admin_get cross-org as Bob (user)         LEAKED    LEAKED    ✓
+  S5   fixed  note_admin_get cross-org as Bob (user)         DENIED    DENIED    ✓
+  S5   fixed  note_admin_get cross-org as Dana (real admin)  ALLOWED   ALLOWED   ✓
+  S6   vuln   note_create_in_org org_id=org_globex (Alice)   INJECTED  INJECTED  ✓
+  S6   fixed  note_create_in_org org_id=org_globex (Alice)   SCOPED    SCOPED    ✓
 
-  Two-way gate: PASS (10/10 rows OK)
+  Two-way gate: PASS (15/15 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -201,21 +208,90 @@ entirely; the server always exports only `session.orgId`.
 
 ---
 
+## Scenario S5 — Role/token-type bypass
+
+**Tool:** `note_admin_get`  
+**Class:** CWE-863 — role/token-type bypass  
+**Toggle:** `LAB_S5`
+
+The tool is named and documented as admin-only. In vuln mode nothing actually
+checks that the caller holds the admin role — any valid token reaches the
+cross-org lookup. Naming a tool `admin_*` is documentation, not enforcement.
+
+**Challenge:** Bob (org Globex, an ordinary user) wants to read Acme's note
+`n_acme_1` using an "admin" tool he was never granted access to. How?
+
+<details>
+<summary>Hint</summary>
+
+Bob's own token is unprivileged. Does `note_admin_get` actually verify that
+before resolving the note?
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Bob calls `note_admin_get` with `id="n_acme_1"` using `bob-token`. In
+`LAB_S5=vuln` the server resolves and returns the note — it never checked
+whether Bob's session role is `"admin"`. The fix: `LAB_S5=fixed` calls
+`requireAdminRole(session)` before the lookup; ordinary tokens are denied,
+while Dana's real admin token (`dana-token`) still succeeds. See
+[`src/auth.js`](src/auth.js)'s `requireAdminRole()` and the comment block
+above `note_admin_get` in [`src/tools.js`](src/tools.js).
+</details>
+
+---
+
+## Scenario S6 — Foreign-parent injection
+
+**Tool:** `note_create_in_org`  
+**Class:** CWE-639 — client-supplied parent/org trusted on create  
+**Toggle:** `LAB_S6`
+
+A cross-team collaboration tool lets a caller create a note "inside" a
+specified org. In vuln mode the server trusts the caller-supplied `org_id`
+with no membership check — any caller can inject a note into an org they do
+not belong to. Unlike S1-S5 (all reads or a delete), this is a **write-side**
+BOLA: it poisons another tenant's data instead of leaking it.
+
+**Challenge:** Alice (org Acme) wants to plant a note that shows up in
+Globex's `note_list`, despite never being a Globex member. How?
+
+<details>
+<summary>Hint</summary>
+
+`note_create_in_org` takes an `org_id` parameter. What org does the note
+actually end up in if Alice supplies someone else's?
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Alice calls `note_create_in_org` with `org_id="org_globex"`. In
+`LAB_S6=vuln` the note is created with `orgId: "org_globex"` — it will show
+up the next time Bob calls `note_list` or `note_search`, despite Alice never
+being a Globex member. The fix: `LAB_S6=fixed` still accepts `org_id` in the
+schema (removing it would be a breaking change, same convention as S2/S4)
+but ignores it; the note is always created inside `session.orgId`.
+</details>
+
+---
+
 ## How it is built
 
 | File | Role |
 |---|---|
-| [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*), 2 notes each (6 total). |
-| [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org }`; `requireOrgAccess(session, object)` — the object-level check. |
-| [`src/tools.js`](src/tools.js) | Nine tools. Four planted-bug tools (one per scenario). |
-| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S4` env vars, passes a `modes` object to `registerTools`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 10-row two-way gate across all 4 scenarios. |
+| [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
+| [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
+| [`src/tools.js`](src/tools.js) | Eleven tools. Six planted-bug tools (one per scenario). |
+| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S6` env vars, passes a `modes` object to `registerTools`. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 15-row two-way gate across all 6 scenarios. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
-the server resolves to a fixed user and org. The caller never asserts its own org
-— only presents a token. In a production MCP server this identity would come from
-the transport / OAuth layer; the lab passes it per call so it stays a single
-process and the authorization logic is explicit and easy to read.
+the server resolves to a fixed user, org, and role. The caller never asserts its
+own org or role — only presents a token. In a production MCP server this identity
+would come from the transport / OAuth layer; the lab passes it per call so it
+stays a single process and the authorization logic is explicit and easy to read.
 
 ---
 
@@ -229,21 +305,23 @@ Each scenario is controlled by an independent env var (all default to `"vuln"`):
 | `LAB_S2` | S2 — `note_search` | `org_id` param overrides session scope | `org_id` ignored; session scope always used |
 | `LAB_S3` | S3 — `note_batch_get` | All resolved notes returned regardless of org | Notes filtered to `session.orgId` |
 | `LAB_S4` | S4 — `note_export` | `org_id="*"/"all"` dumps all tenants | `org_id` ignored; own org only |
+| `LAB_S5` | S5 — `note_admin_get` | No role check; any token reaches cross-org lookup | `requireAdminRole()` blocks non-admins |
+| `LAB_S6` | S6 — `note_create_in_org` | `org_id` param trusted as write target | `org_id` ignored; note created in session's own org |
 
 Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
-LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed npm start
+LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed npm start
 
 # Windows PowerShell
-$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; npm start
+$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; npm start
 ```
 
 Isolate one scenario (e.g. test only S2):
 
 ```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed npm start
+LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed npm start
 ```
 
 ---
@@ -267,13 +345,14 @@ but forgets to check *whether you may touch this object*":
   slipped through — or vice-versa.
 - [ ] **Wildcard / sentinel short-circuit (→ S4).** A special value (`'all'`,
   `'*'`, empty, `0`, `null`) skips the scope filter entirely.
-- [ ] **Role / token-type bypass.** An "admin" or "service" code path skips the
-  per-object check.
+- [ ] **Role / token-type bypass (→ S5).** An "admin" or "service" code path
+  skips the per-object check.
 - [ ] **List → get asymmetry (→ S3).** `list` only returns your org's objects, so
   ids feel "private" — but `get`/`batch-get` accept *any* id and the ids are
   guessable or enumerable.
-- [ ] **Create/update accepting a foreign parent.** `create(parent_id=…)` accepts
-  a parent the caller is not a member of, injecting an object into another tenant.
+- [ ] **Create/update accepting a foreign parent (→ S6).** `create(parent_id=…)`
+  accepts a parent the caller is not a member of, injecting an object into
+  another tenant.
 
 The exploit primitive is always the same: authenticate as tenant **B**, call the
 suspect tool with an object or scope that belongs to tenant **A**, and see whether

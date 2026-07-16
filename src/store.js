@@ -8,22 +8,26 @@
 // Nothing here is sensitive — it is entirely synthetic seed data.
 
 /** @typedef {{ id: string, name: string }} Org */
-/** @typedef {{ id: string, orgId: string, name: string }} User */
+/** @typedef {{ id: string, orgId: string, name: string, role?: string }} User */
 /** @typedef {{ id: string, orgId: string, ownerId: string, title: string, body: string }} Note */
 
 export function createStore() {
   /** @type {Map<string, Org>} */
   const orgs = new Map([
-    ["org_acme",    { id: "org_acme",    name: "Acme" }],
-    ["org_globex",  { id: "org_globex",  name: "Globex" }],
-    ["org_initech", { id: "org_initech", name: "Initech" }],
+    ["org_acme",     { id: "org_acme",     name: "Acme" }],
+    ["org_globex",   { id: "org_globex",   name: "Globex" }],
+    ["org_initech",  { id: "org_initech",  name: "Initech" }],
+    ["org_platform", { id: "org_platform", name: "Platform Ops" }],
   ]);
 
   /** @type {Map<string, User>} */
   const users = new Map([
-    ["u_alice", { id: "u_alice", orgId: "org_acme",    name: "Alice" }],
-    ["u_bob",   { id: "u_bob",   orgId: "org_globex",  name: "Bob" }],
-    ["u_carol", { id: "u_carol", orgId: "org_initech", name: "Carol" }],
+    ["u_alice", { id: "u_alice", orgId: "org_acme",    name: "Alice", role: "user" }],
+    ["u_bob",   { id: "u_bob",   orgId: "org_globex",  name: "Bob",   role: "user" }],
+    ["u_carol", { id: "u_carol", orgId: "org_initech", name: "Carol", role: "user" }],
+    // Dana is the only real admin — org_platform holds no notes of its own,
+    // it exists purely so Dana's session resolves like everyone else's.
+    ["u_dana",  { id: "u_dana",  orgId: "org_platform", name: "Dana",  role: "admin" }],
   ]);
 
   /** @type {Map<string, Note>} */

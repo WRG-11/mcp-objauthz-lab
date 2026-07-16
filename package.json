@@ -1,6 +1,6 @@
 {
   "name": "mcp-objauthz-lab",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "description": "A self-hostable, synthetic vulnerable MCP server that teaches object-level / cross-tenant authorization bugs (BOLA / IDOR, CWE-639 / CWE-862) — the 'inconsistent-authorization single-outlier' class.",
   "type": "module",

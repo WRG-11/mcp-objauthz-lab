@@ -24,12 +24,13 @@ const TOKENS = new Map([
   ["alice-token", "u_alice"], // Alice, org Acme
   ["bob-token",   "u_bob"],   // Bob, org Globex
   ["carol-token", "u_carol"], // Carol, org Initech
+  ["dana-token",  "u_dana"],  // Dana, org Platform Ops — the only real admin
 ]);
 
 /**
  * Resolve a bearer token to a session. THIS is the trusted identity — the org
- * comes from the user record, never from the caller's input.
- * @returns {{ userId: string, userName: string, orgId: string, orgName: string }}
+ * AND the role come from the user record, never from the caller's input.
+ * @returns {{ userId: string, userName: string, orgId: string, orgName: string, role: string }}
  */
 export function resolveSession(store, token) {
   const userId = TOKENS.get(token);
@@ -41,6 +42,7 @@ export function resolveSession(store, token) {
     userName: user.name,
     orgId:    org.id,
     orgName:  org.name,
+    role:     user.role ?? "user",
   };
 }
 
@@ -53,6 +55,19 @@ export function requireOrgAccess(session, object) {
   if (!object || object.orgId !== session.orgId) {
     throw new AuthzError(
       `cross-tenant access denied: object belongs to a different org`,
+    );
+  }
+}
+
+/**
+ * Role-level authorization check: the session must hold the "admin" role.
+ * This is the check the S5 planted-bug tool (note_admin_get, in LAB_S5=vuln)
+ * skips entirely — naming a tool "admin_*" is documentation, not enforcement.
+ */
+export function requireAdminRole(session) {
+  if (!session || session.role !== "admin") {
+    throw new AuthzError(
+      `admin role required: session role is '${session?.role ?? "none"}'`,
     );
   }
 }
