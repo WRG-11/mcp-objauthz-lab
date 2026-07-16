@@ -4,6 +4,41 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-07-16
+
+Two new independent BOLA scenarios closing the two hunt-checklist patterns
+that had no runnable example (role/token-type bypass, foreign-parent
+injection). Server bumped to v3.0.0; `LAB_S1`-`LAB_S4` behavior unchanged.
+
+### Added
+- **S5 — Role/token-type bypass** (`LAB_S5`): new tool `note_admin_get` is
+  named and documented as admin-only but in vuln mode never checks the
+  caller's role — any valid token reaches the cross-org lookup. Fix:
+  `requireAdminRole(session)` runs first; a real admin token still succeeds
+  (no over-block).
+- **S6 — Foreign-parent injection** (`LAB_S6`): new tool
+  `note_create_in_org` accepts an `org_id` parameter; in vuln mode the
+  server trusts it as the write target with no membership check, letting a
+  caller inject a note into an org they do not belong to. Unlike S1-S4
+  (read/delete leaks), this is a write-side BOLA. Fix: `org_id` accepted in
+  the schema but ignored; the note is always created inside
+  `session.orgId`.
+- Fourth identity **Dana** (`dana-token`, `role: "admin"`, org *Platform
+  Ops*) added to `store.js`/`auth.js` — the only session S5's fixed build
+  authorizes.
+- `requireAdminRole()` helper in `auth.js` — the check S5's vuln build
+  skips.
+- Two-way gate expanded to 15 rows (3 for S5, 2 for S6).
+
+### Changed
+- `resolveSession()` now returns a `role` field (`"user"` for the three
+  original tenants, `"admin"` for Dana).
+- README hunt-checklist bullets for role-bypass and foreign-parent
+  injection now link to their scenario (previously listed with no runnable
+  example).
+- `SECURITY.md` corrected: was still describing "one intentionally planted
+  flaw" since the v1.0.0 wording, stale since the v2.0.0 (S2-S4) expansion.
+
 ## [2.0.0] - 2026-06-24
 
 Three new independent BOLA scenarios, each gated by its own env var.

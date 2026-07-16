@@ -11,14 +11,17 @@
 //   note_search  ← S2 planted bug: trusts caller-supplied org_id (scope-as-param)
 //   note_batch_get  ← S3 planted bug: resolves ids without per-object org check (list→get asymmetry)
 //   note_export  ← S4 planted bug: wildcard sentinel "* / all" bypasses org scope
+//   note_admin_get      ← S5 planted bug: admin-named tool has no role check (role/token-type bypass)
+//   note_create_in_org  ← S6 planted bug: trusts caller-supplied org_id as write target (foreign-parent injection)
 //
-// Each scenario is gated by its own mode flag (modes.s1..s4 = "vuln" | "fixed").
+// Each scenario is gated by its own mode flag (modes.s1..s6 = "vuln" | "fixed").
 // Scenarios are independent: you can set any combination to "fixed" to isolate one.
 
 import { z } from "zod";
 import {
   resolveSession,
   requireOrgAccess,
+  requireAdminRole,
   AuthnError,
   AuthzError,
   NotFoundError,
@@ -57,7 +60,7 @@ const notFound = (id) => {
  * Register every tool on the server.
  * @param {import("@modelcontextprotocol/sdk/server/mcp.js").McpServer} server
  * @param {ReturnType<import("./store.js").createStore>} store
- * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed" }} modes
+ * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed", s5: "vuln"|"fixed", s6: "vuln"|"fixed" }} modes
  */
 export function registerTools(server, store, modes) {
   // whoami — echoes the server-trusted session (handy to verify token → org mapping).
@@ -257,6 +260,83 @@ export function registerTools(server, store, modes) {
         return ok(store.listAllNotes());
       }
       return ok(store.listNotesByOrg(session.orgId));
+    }),
+  );
+
+  // ── S5: note_admin_get ───────────────────────────────────────────────────
+  // ROLE / TOKEN-TYPE BYPASS BOLA (CWE-863).
+  //
+  // Support/ops tooling often needs a cross-tenant "view any note" escape
+  // hatch for legitimate admins. The tool is named and documented as
+  // admin-only, but in vuln mode nothing actually VERIFIES the caller holds
+  // the admin role — any valid token reaches the cross-org lookup. Naming a
+  // tool "admin_*" is documentation, not enforcement.
+  //
+  //   Exploit: Bob (ordinary user, org Globex) calls note_admin_get with
+  //            Acme's note id → in vuln mode the object is returned; the
+  //            tool never checked whether Bob is an admin at all.
+  //
+  // In fixed mode requireAdminRole(session) runs first — ordinary users are
+  // denied, and Dana (the one real admin token) still succeeds, proving the
+  // fix does not over-block legitimate admin use.
+  server.registerTool(
+    "note_admin_get",
+    {
+      description:
+        "Get any note by id, across organizations. Admin/support use only.",
+      inputSchema: { token: z.string(), id: z.string() },
+    },
+    guard(async ({ token, id }) => {
+      const session = resolveSession(store, token);
+      if (modes.s5 === "fixed") requireAdminRole(session); // <-- THE FIX (absent in vuln mode)
+      const note = store.getNote(id);
+      if (!note) notFound(id);
+      return ok(note);
+    }),
+  );
+
+  // ── S6: note_create_in_org ───────────────────────────────────────────────
+  // FOREIGN-PARENT INJECTION BOLA (CWE-639).
+  //
+  // A cross-team collaboration tool lets a caller create a note "in" a
+  // specified org. In vuln mode the server trusts the caller-supplied
+  // org_id with no membership check — any caller can inject a note into an
+  // org they do not belong to. Unlike S1-S4 (all reads or a delete), this is
+  // a WRITE-side BOLA: it poisons another tenant's data instead of leaking it.
+  //
+  //   Exploit: Alice (org Acme) calls note_create_in_org with
+  //            org_id="org_globex" → in vuln mode the note is created with
+  //            orgId "org_globex" and shows up in Globex's note_list /
+  //            note_search, despite Alice never being a Globex member.
+  //
+  // In fixed mode org_id is accepted in the schema (avoids a breaking API
+  // change, same convention as S2/S4) but ignored; the note is always
+  // created inside session.orgId.
+  server.registerTool(
+    "note_create_in_org",
+    {
+      description:
+        "Create a note inside a specific organization (cross-team collaboration). The org_id parameter targets the destination org.",
+      inputSchema: {
+        token: z.string(),
+        org_id: z.string().optional(),
+        title: z.string(),
+        body: z.string().optional(),
+      },
+    },
+    guard(async ({ token, org_id, title, body }) => {
+      const session = resolveSession(store, token);
+      // S6 vuln: trust caller-supplied org_id as the creation target.
+      // S6 fixed: always create inside session.orgId (org_id ignored).
+      const targetOrgId =
+        modes.s6 === "vuln" && org_id ? org_id : session.orgId;
+      const note = store.createNote({
+        orgId: targetOrgId,
+        ownerId: session.userId,
+        title,
+        body,
+      });
+      return ok(note);
     }),
   );
 }

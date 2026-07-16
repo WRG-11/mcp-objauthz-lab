@@ -7,6 +7,8 @@
 //   LAB_S2             — S2: note_search trusts a caller-supplied org_id ("scope-as-param")
 //   LAB_S3             — S3: note_batch_get skips per-object org check ("list→get asymmetry")
 //   LAB_S4             — S4: note_export wildcard org_id="*" bypasses scope ("sentinel bypass")
+//   LAB_S5             — S5: note_admin_get has no role check ("role/token-type bypass")
+//   LAB_S6             — S6: note_create_in_org trusts caller-supplied org_id ("foreign-parent injection")
 //
 // Each scenario is independent: set all to "fixed" to run the fully hardened server,
 // or mix vuln/fixed to isolate one scenario at a time.
@@ -28,11 +30,13 @@ const modes = {
   s2: fixed(process.env.LAB_S2) ? "fixed" : "vuln",
   s3: fixed(process.env.LAB_S3) ? "fixed" : "vuln",
   s4: fixed(process.env.LAB_S4) ? "fixed" : "vuln",
+  s5: fixed(process.env.LAB_S5) ? "fixed" : "vuln",
+  s6: fixed(process.env.LAB_S6) ? "fixed" : "vuln",
 };
 
 const server = new McpServer({
   name: "mcp-objauthz-lab",
-  version: "2.0.0",
+  version: "3.0.0",
 });
 
 const store = createStore();
@@ -43,5 +47,5 @@ await server.connect(transport);
 
 // stderr only — never stdout (that is the protocol channel).
 console.error(
-  `[mcp-objauthz-lab] up  S1=${modes.s1}  S2=${modes.s2}  S3=${modes.s3}  S4=${modes.s4}`,
+  `[mcp-objauthz-lab] up  S1=${modes.s1}  S2=${modes.s2}  S3=${modes.s3}  S4=${modes.s4}  S5=${modes.s5}  S6=${modes.s6}`,
 );
