@@ -43,10 +43,11 @@ Requirements: **Node.js ≥ 20**.
 
 ```bash
 npm install
-npm run poc
+npm test    # 39 unit tests — auth.js/store.js in isolation
+npm run poc # 15-row two-way gate — the tools wired end-to-end over MCP
 ```
 
-Expected output (15/15 rows, all scenarios):
+Expected `npm run poc` output (15/15 rows, all scenarios):
 
 ```
 MCP object-level authorization lab — two-way gate (6 scenarios)
@@ -286,6 +287,7 @@ but ignores it; the note is always created inside `session.orgId`.
 | [`src/tools.js`](src/tools.js) | Eleven tools. Six planted-bug tools (one per scenario). |
 | [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S6` env vars, passes a `modes` object to `registerTools`. |
 | [`poc/exploit.js`](poc/exploit.js) | MCP client running the 15-row two-way gate across all 6 scenarios. |
+| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (39 tests, no MCP transport involved). |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
 the server resolves to a fixed user, org, and role. The caller never asserts its

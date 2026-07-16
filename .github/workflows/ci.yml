@@ -2,11 +2,12 @@ name: lab-integrity
 
 # This lab is vulnerable BY DESIGN. CI does NOT assert "the code is secure" —
 # it asserts the teaching artifact still works: deps install, every module
-# parses, and the two-way gate holds (the vuln build reproduces the cross-tenant
-# delete while the scoped sibling stays denied; the fixed build blocks it without
-# over-blocking the same-tenant case). A green check = the lab demonstrates the
-# bug and the fix exactly as the README documents. (No CodeQL: it would simply
-# re-flag the intentionally planted BOLA.)
+# parses, the pure auth.js/store.js functions behave correctly in isolation
+# (unit tests), and the two-way gate holds (the vuln build reproduces the
+# cross-tenant delete while the scoped sibling stays denied; the fixed build
+# blocks it without over-blocking the same-tenant case). A green check = the
+# lab demonstrates the bug and the fix exactly as the README documents. (No
+# CodeQL: it would simply re-flag the intentionally planted BOLA.)
 
 on:
   push:
@@ -36,5 +37,9 @@ jobs:
           node --check src/store.js
           node --check src/tools.js
           node --check poc/exploit.js
+          node --check test/auth.test.js
+          node --check test/store.test.js
+      - name: unit tests (auth.js + store.js pure functions, node:test)
+        run: npm test
       - name: two-way gate (npm run poc — exit 0 = gate held)
         run: npm run poc
