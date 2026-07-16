@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-07-16
+
+Unit tests for the pure business logic (no tool/protocol surface change).
+
+### Added
+- `test/auth.test.js` — 16 tests for `resolveSession()`, `requireOrgAccess()`,
+  `requireAdminRole()`, covering the edge cases the PoC's happy-path
+  scenarios don't reach directly (unknown/empty token, null/undefined
+  object, null/undefined session, error-message content).
+- `test/store.test.js` — 23 tests for every `createStore()` method
+  (org/user/note lookups, create/update/delete, org-scoped search),
+  including the case-insensitive search and the type-guard on
+  `updateNote()`'s patch fields.
+- `npm test` (`node --test`, Node's built-in runner — no new dependency)
+  wired into CI as its own step, ahead of the two-way gate.
+
+### Notes
+- These test the pure `auth.js`/`store.js` functions directly, independent
+  of the MCP transport. `poc/exploit.js`'s two-way gate remains the
+  end-to-end proof that the tools in `src/tools.js` actually call these
+  checks correctly; the two suites are complementary, not redundant.
+
 ## [3.0.0] - 2026-07-16
 
 Two new independent BOLA scenarios closing the two hunt-checklist patterns
