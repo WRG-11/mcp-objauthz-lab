@@ -8,10 +8,12 @@ each an independent tool handler) plus a hunt-checklist. All data is synthetic �
 no real users, secrets, or production systems; the server is meant to be run
 locally.
 
-## The planted flaw is intentional — do not report it
+## The planted flaws are intentional — do not report them
 
-The lab's planted authorization bug is the **point** of the exercise (see the
-README hunt-checklist and the `LAB_MODE` toggle). It is not a vulnerability.
+All six planted authorization bugs are the **point** of the exercise (see the
+README hunt-checklist and the `LAB_MODE` / `LAB_S1`-`LAB_S6` toggles). They are
+not vulnerabilities. Note that every toggle **defaults to `vuln`**, so a server
+started with no environment set has all six live — that is intended.
 
 ## Reporting an *unintended* issue
 

@@ -19,8 +19,20 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { createStore } from "./store.js";
 import { registerTools } from "./tools.js";
+
+// Read the version from package.json rather than restating it here. The two
+// had already drifted apart: package.json said 3.1.0 while the version this
+// server advertised in its MCP `initialize` handshake — the only one a client
+// ever sees — was still the hardcoded 3.0.0.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(
+  readFileSync(join(HERE, "..", "package.json"), "utf8"),
+);
 
 const fixed = (v) => v === "fixed";
 
@@ -36,7 +48,7 @@ const modes = {
 
 const server = new McpServer({
   name: "mcp-objauthz-lab",
-  version: "3.0.0",
+  version,
 });
 
 const store = createStore();

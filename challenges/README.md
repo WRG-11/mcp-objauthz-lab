@@ -17,7 +17,13 @@ Solve them in any order. Solutions are in [`../solutions/`](../solutions/).
 - Each challenge runs the server locally over stdio — no network, no third party.
 - Use any MCP client (the included `poc/exploit.js`, Claude Desktop, Cursor, etc.).
 - Do not modify server source; only change env vars and tool arguments.
-- Each scenario is isolated: setting `LAB_S2=vuln` does not affect S1/S3/S4/S5/S6.
+- The toggles are independent — setting `LAB_S2` never changes S1/S3/S4/S5/S6.
+- **But every scenario defaults to `vuln` when its variable is unset**, so
+  "independent" is not "off". Each challenge's Setup block therefore pins the
+  other five to `fixed`. Run the bare `LAB_S2=vuln node src/server.js` and all
+  six bugs are live at once: as an ordinary user you can reach another org's
+  data through six different tools, which makes S1 ("find the one tool")
+  unanswerable and turns the other five into guess-which-one-was-meant.
 
 ## How to interact with the server
 

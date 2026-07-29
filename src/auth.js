@@ -8,7 +8,9 @@
 //
 // AUTHORIZATION (may you touch THIS object?) is the interesting part and the
 // subject of the lab: requireOrgAccess() enforces that an object belongs to the
-// caller's org. The bug is a tool that forgets to call it. See src/tools.js.
+// caller's org, and requireAdminRole() enforces the cross-tenant escape hatch.
+// The bugs are the six tools that skip, bypass or short-circuit one of those
+// checks — one per scenario S1-S6. See src/tools.js.
 
 /** Raised when a token is unknown / the session cannot be established. */
 export class AuthnError extends Error {}
@@ -48,8 +50,9 @@ export function resolveSession(store, token) {
 
 /**
  * Object-level authorization check: the session may only touch objects that
- * belong to its own org. This is the single check that the planted-bug tool
- * (note_delete, in LAB_MODE=vuln) is missing.
+ * belong to its own org. This is the check S1's planted-bug tool (note_delete,
+ * in LAB_MODE/LAB_S1=vuln) omits outright, and the one S2/S3/S4/S6 route
+ * around by trusting a caller-supplied scope instead of an object's own org.
  */
 export function requireOrgAccess(session, object) {
   if (!object || object.orgId !== session.orgId) {
