@@ -293,6 +293,14 @@ but ignores it; the note is always created inside `session.orgId`.
 
 ---
 
+## Detection rules — automate the hunt
+
+[`detection/`](detection/README.md) ships 5 [Semgrep](https://semgrep.dev)
+rules — one per code shape above — that flag these patterns in **your own**
+MCP server source, not just this lab's. Honestly documented: they catch 4 of
+6 scenarios when run against this lab's own runtime-toggle source (a real,
+disclosed limitation, not a lab artifact — see the linked README for why).
+
 ## How it is built
 
 | File | Role |

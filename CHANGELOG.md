@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`detection/` — Semgrep static-analysis rules for the same bug class the
+  challenges teach.** Five rules (`detection/semgrep/mcp-object-authz.yml`),
+  one per code shape from S1-S6 (S2/S6 share a rule — same shape, different
+  tool), each with a matching vuln/ok fixture pair in
+  `detection/semgrep/fixtures/`. Complements the hands-on lab: the
+  challenges train a human to read tool handlers; this is the automatable
+  half a CI pipeline or pre-commit hook can run against a real MCP server's
+  source. Honestly documented limitation (`detection/README.md`): against
+  this lab's own `src/tools.js` (vuln/fixed gated by a runtime `LAB_MODE`
+  toggle in the same function, not separate files) the rules catch S2/S3/
+  S4/S6 but miss S1/S5 — both rely on "no authz call appears between lookup
+  and sink," and in `tools.js` the call *does* appear, just behind an `if
+  (modes.sN === "fixed")` runtime condition a non-dataflow static rule can't
+  evaluate. Real limitation, not a lab artifact — any codebase with a
+  feature-flagged authz check has the same blind spot for this rule shape.
+- CI: new `detection-rules` job runs the ruleset against its own fixtures
+  and asserts the expected finding count, so a future edit that silently
+  breaks a rule (over- or under-matching) fails the build the same way a
+  broken two-way-gate row would.
+
 ### Fixed
 
 - **Challenge setups did not isolate their scenario, which made S1

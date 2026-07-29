@@ -1,0 +1,188 @@
+rules:
+  - id: mcp-missing-object-authz-check
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      An object resolved from storage by a client-supplied id reaches a
+      mutation or response without an authorization/ownership check in
+      between. This is the MCP object-level authorization pattern
+      (BOLA/IDOR, CWE-639/862) — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $OBJ = $STORE.$GETMETHOD($ID);
+              ...
+              $STORE.$MUTMETHOD($OBJ.$FIELD);
+          - pattern: |
+              $OBJ = $STORE.$GETMETHOD($ID);
+              ...
+              return ok($OBJ);
+      - metavariable-regex:
+          metavariable: $GETMETHOD
+          regex: "(?i)^(get|find).*"
+      - metavariable-regex:
+          metavariable: $MUTMETHOD
+          regex: "(?i)^(delete|update).*"
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          requireOrgAccess(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          requireOwnership(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          requireAccess(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          checkAccess(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          checkOwnership(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          assertOwner(...);
+          ...
+    metadata:
+      cwe: ["CWE-639", "CWE-862"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-client-supplied-scope-overrides-session
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A client-supplied org/tenant/project scope argument can override the
+      server-trusted session scope. Arguments like org_id/tenant_id/
+      project_id must never select which tenant's data a tool operates on —
+      always use the session's own scope and ignore (or reject) the
+      caller-supplied value. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
+    patterns:
+      - pattern-either:
+          - pattern: "$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD"
+          - pattern: "$SCOPEPARAM || $SESSION.$FIELD"
+          - pattern: "$SCOPEPARAM ?? $SESSION.$FIELD"
+      - metavariable-regex:
+          metavariable: $SCOPEPARAM
+          regex: "(?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid)$"
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-wildcard-sentinel-scope-bypass
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A magic "all"/"*" sentinel value on a scope parameter is honored
+      without a role check, letting any caller (not just admins) dump every
+      tenant's data in one call. Gate wildcard scope on an explicit
+      requireAdminRole()-style check, not on the parameter's literal value.
+      CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+    patterns:
+      - pattern-either:
+          - pattern: '$PARAM === "*"'
+          - pattern: '$PARAM === "all"'
+          - pattern: '$PARAM == "*"'
+          - pattern: '$PARAM == "all"'
+      - pattern-not-inside: |
+          requireAdminRole(...);
+          ...
+      - pattern-not-inside: |
+          checkAdminRole(...);
+          ...
+      - pattern-not-inside: |
+          assertAdminRole(...);
+          ...
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: LOW
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-batch-resolve-missing-per-item-scope-filter
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      Multiple objects are resolved by client-supplied ids in a batch, but
+      the surrounding code has no per-item scope filter (e.g. a
+      ".filter(n => n.orgId === session.orgId)" afterward). A sibling
+      list() tool is often correctly scoped while its batch-get sibling
+      skips the per-object check — the "list->get asymmetry" pattern.
+      CWE-862 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
+    patterns:
+      - pattern: "$IDS.map($F => $STORE.$METHOD($F))"
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: "(?i)^(get|find).*"
+      - pattern-not-inside: |
+          $RESOLVED = $IDS.map($F => $STORE.$METHOD($F));
+          ...
+          $RESOLVED.filter(...);
+    metadata:
+      cwe: ["CWE-862"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-admin-named-tool-missing-role-check
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A tool registered with an admin-sounding name never calls a
+      role-check function in its handler. Naming a tool "admin_*" /
+      "*_admin_*" is documentation, not enforcement — any valid token can
+      reach it unless the handler actually verifies the caller's role.
+      CWE-863 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass
+    patterns:
+      - pattern: "server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => { ... }))"
+      - metavariable-regex:
+          # $NAME captures a quoted string literal (e.g. "note_admin_get"),
+          # so the regex must not anchor to the leading character.
+          metavariable: $NAME
+          regex: "(?i).*admin.*"
+      - pattern-not-inside: |
+          server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {
+            ...
+            requireAdminRole(...);
+            ...
+          }));
+      - pattern-not-inside: |
+          server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {
+            ...
+            checkAdminRole(...);
+            ...
+          }));
+      - pattern-not-inside: |
+          server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {
+            ...
+            assertAdminRole(...);
+            ...
+          }));
+    metadata:
+      cwe: ["CWE-863"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
