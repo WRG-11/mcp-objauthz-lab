@@ -4,6 +4,52 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Challenge setups did not isolate their scenario, which made S1
+  unanswerable.** Every `LAB_S*` toggle defaults to `vuln` when unset, so
+  `challenges/s1.md`'s Setup (`LAB_MODE=vuln node src/server.js`) left all six
+  bugs live. Measured against that exact command, an ordinary user (`bob-token`,
+  org Globex) reached Acme's data through **six** tools — `note_delete`
+  (intended), plus `note_admin_get`, `note_batch_get`, `note_search`,
+  `note_export` and `note_create_in_org` — while S1 asks the reader to "find the
+  **one** tool". S1 is also the only challenge that does not name its tool up
+  front (`Tool under test: One of the six core note tools`), so it is the one
+  that actually depends on the isolation. A learner who reached for
+  `note_admin_get` first got a working exploit and the wrong answer. Every
+  challenge's Setup now pins the other five to `fixed`.
+- `challenges/README.md` said "Each scenario is isolated: setting `LAB_S2=vuln`
+  does not affect S1/S3/S4/S5/S6." True of the toggles, but it reads as though
+  the others are off; they default to `vuln`. Reworded with the reason.
+- `src/server.js` advertised a hardcoded MCP version of `3.0.0` while
+  `package.json` was `3.1.0` — and the handshake value is the only one a client
+  ever sees. The version is now read from `package.json`, so the two cannot
+  drift apart again.
+- Stale comments from the four-scenario era, none of which matched the code:
+  `src/tools.js` ("4 independent BOLA scenarios" above an inventory of six),
+  `poc/exploit.js` ("four independent BOLA scenarios" in a file that runs six),
+  `src/auth.js` ("the bug is a tool that forgets to call it", singular),
+  `.github/workflows/ci.yml` (described only the S1 gate), `SECURITY.md` (the
+  count was corrected in 3.0.0 but the prose two lines below still said "the
+  planted authorization bug"), and `solutions/s1.md` ("Five tools are correct").
+
+### Added
+
+- **Two-way gate now covers the all-`fixed` hardened build (`ALL` rows, 15 → 17).**
+  Each S1-S6 arm pins one toggle and leaves the other five at their `vuln`
+  default — that is what makes them isolated, and it is also why the build the
+  README tells readers to run for a hardened server had no coverage at all. The
+  new arm asserts both halves on the whole server: nine cross-tenant routes as
+  an ordinary user are all blocked, and legitimate access (Dana's admin
+  cross-org read, Bob's own note) still works.
+- Verified by mutation, not assertion: disabling S4's fix so only the `"all"`
+  sentinel leaks leaves **both** S4 rows green (that arm only tries `"*"`) while
+  the `ALL` row reports `OPEN=1` and the gate exits 1. Disabling S5's fix is
+  likewise caught. The hardened build itself was measured clean before the arm
+  was written — this closes a coverage gap, not a live bug.
+
 ## [3.1.0] - 2026-07-16
 
 Unit tests for the pure business logic (no tool/protocol surface change).

@@ -44,13 +44,13 @@ Requirements: **Node.js ≥ 20**.
 ```bash
 npm install
 npm test    # 39 unit tests — auth.js/store.js in isolation
-npm run poc # 15-row two-way gate — the tools wired end-to-end over MCP
+npm run poc # 17-row two-way gate — the tools wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (15/15 rows, all scenarios):
+Expected `npm run poc` output (17/17 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (6 scenarios)
+MCP object-level authorization lab — two-way gate (6 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -68,14 +68,23 @@ MCP object-level authorization lab — two-way gate (6 scenarios)
   S5   fixed  note_admin_get cross-org as Dana (real admin)  ALLOWED   ALLOWED   ✓
   S6   vuln   note_create_in_org org_id=org_globex (Alice)   INJECTED  INJECTED  ✓
   S6   fixed  note_create_in_org org_id=org_globex (Alice)   SCOPED    SCOPED    ✓
+  ALL  fixed  9 cross-tenant routes (Bob→Acme)               BLOCKED   BLOCKED   ✓
+  ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (15/15 rows OK)
+  Two-way gate: PASS (17/17 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
 network, no third party**) and runs a *two-way gate* per scenario: in the **vuln**
 build the exploit succeeds; in the **fixed** build it is blocked and legitimate
 same-org access still works (no false positive).
+
+The final `ALL` rows apply that same two-way discipline to the whole server at
+once — every scenario `fixed`, every cross-tenant route closed, and legitimate
+access (an admin's cross-org read, a user's own note) still working. Each S1-S6
+arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
+without these rows the hardened build the section below tells you to run would
+have no coverage at all.
 
 ---
 
@@ -85,14 +94,20 @@ same-org access still works (no false positive).
 **Class:** CWE-639 / CWE-862 — object-level authorization  
 **Toggle:** `LAB_MODE` / `LAB_S1`
 
-Five of the six core note tools are correctly authorized: every one that
-resolves an object by a client-supplied `id` calls `requireOrgAccess()` to
-confirm the note belongs to the caller's org. `note_delete` does not (in vuln
-mode) — **any caller can delete any org's note** by knowing or guessing its id.
+Among the six core note tools, every one that resolves an object by a
+client-supplied `id` calls `requireOrgAccess()` to confirm the note belongs to
+the caller's org — except `note_delete` (in vuln mode), so **any caller can
+delete any org's note** by knowing or guessing its id.
 
-**Challenge:** The server exposes `note_list`, `note_get`, `note_create`,
-`note_update`, `note_delete`, `note_search`. Exactly one lets a caller in one
-org delete another org's note. Which one, and what makes it different?
+**Challenge:** The six core note tools are `note_list`, `note_get`,
+`note_create`, `note_update`, `note_delete`, `note_search`. Exactly one lets a
+caller in one org delete another org's note. Which one, and what makes it
+different?
+
+> The server exposes eleven tools in total; the other five belong to S3-S6 and
+> are vulnerable in their own default state. Run
+> [`challenges/s1.md`](challenges/s1.md)'s Setup command, which pins them to
+> `fixed`, or this scenario has more than one answer.
 
 <details>
 <summary>Hint</summary>
@@ -286,7 +301,7 @@ but ignores it; the note is always created inside `session.orgId`.
 | [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
 | [`src/tools.js`](src/tools.js) | Eleven tools. Six planted-bug tools (one per scenario). |
 | [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S6` env vars, passes a `modes` object to `registerTools`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 15-row two-way gate across all 6 scenarios. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 17-row two-way gate: all 6 scenarios in isolation, plus the all-`fixed` hardened build. |
 | [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (39 tests, no MCP transport involved). |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`

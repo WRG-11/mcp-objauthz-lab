@@ -1,4 +1,4 @@
-// MCP tool definitions — 4 independent BOLA scenarios.
+// MCP tool definitions — 6 independent BOLA scenarios across 11 tools.
 //
 // Tool inventory:
 //
