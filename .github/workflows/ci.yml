@@ -3,11 +3,14 @@ name: lab-integrity
 # This lab is vulnerable BY DESIGN. CI does NOT assert "the code is secure" —
 # it asserts the teaching artifact still works: deps install, every module
 # parses, the pure auth.js/store.js functions behave correctly in isolation
-# (unit tests), and the two-way gate holds (the vuln build reproduces the
-# cross-tenant delete while the scoped sibling stays denied; the fixed build
-# blocks it without over-blocking the same-tenant case). A green check = the
-# lab demonstrates the bug and the fix exactly as the README documents. (No
-# CodeQL: it would simply re-flag the intentionally planted BOLA.)
+# (unit tests), and the two-way gate holds across all six scenarios plus the
+# all-fixed hardened build. Two-way means both halves: in each vuln build the
+# exploit reproduces (and a correctly-scoped sibling still denies, proving an
+# outlier rather than a globally broken server), and in each fixed build it is
+# blocked without over-blocking legitimate same-tenant or admin access. A green
+# check = the lab demonstrates every bug and every fix exactly as the README
+# documents. (No CodeQL: it would simply re-flag the intentionally planted
+# BOLA — verified off, `code-scanning/default-setup` reports "not-configured".)
 
 on:
   push:
@@ -43,3 +46,30 @@ jobs:
         run: npm test
       - name: two-way gate (npm run poc — exit 0 = gate held)
         run: npm run poc
+
+  detection-rules:
+    name: detection-rule fixtures (5 rules x vuln/ok pair)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: install semgrep
+        run: pip install --quiet semgrep
+      - name: scan fixtures, assert exact expected finding count
+        run: |
+          semgrep --config detection/semgrep/mcp-object-authz.yml \
+            detection/semgrep/fixtures/ --no-git-ignore --quiet --json \
+            --output=/tmp/semgrep-fixtures.json
+          node -e '
+            const d = JSON.parse(require("fs").readFileSync("/tmp/semgrep-fixtures.json", "utf8"));
+            const got = d.results.length;
+            const want = 6; // 5 rules; mcp-wildcard-sentinel-scope-bypass
+                             // double-reports its one vuln line (two pattern-either branches).
+            console.log(`detection rules: ${got} fixture findings (want ${want})`);
+            if (got !== want) {
+              console.error("Rule set drifted from its own fixtures — see detection/README.md");
+              process.exit(1);
+            }
+          '
