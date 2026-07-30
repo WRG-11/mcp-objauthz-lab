@@ -65,9 +65,9 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     message: >
-      A client-supplied org/tenant/project scope argument can override the
+      A client-supplied scope or identity argument can override the
       server-trusted session scope. Arguments like org_id/tenant_id/
-      project_id must never select which tenant's data a tool operates on —
+      project_id/user_id must never select whose data a tool operates on —
       always use the session's own scope and ignore (or reject) the
       caller-supplied value. CWE-639 — see
       https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
@@ -76,9 +76,14 @@ rules:
           - pattern: "$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD"
           - pattern: "$SCOPEPARAM || $SESSION.$FIELD"
           - pattern: "$SCOPEPARAM ?? $SESSION.$FIELD"
+      # user_id/owner_id are the per-USER spelling of the same bug: a caller
+      # naming whose row to touch. They were missing until CVE-2026-9135 (IBM
+      # Langflow) turned up as the first public CVE of this class and used
+      # exactly that spelling -- see detection/README.md. `(?i)` covers the
+      # camelCase forms, so `userId` matches `userid`.
       - metavariable-regex:
           metavariable: $SCOPEPARAM
-          regex: "(?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid)$"
+          regex: "(?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid)$"
     metadata:
       cwe: ["CWE-639"]
       category: security

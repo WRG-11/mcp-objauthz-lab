@@ -15,7 +15,7 @@ scenarios (S2 and S6 share a rule — same code shape, different tool):
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
 | `mcp-missing-object-authz-check` | S1 | object resolved by client id, mutated/returned with no `require*Access`/`check*Access`/`assert*Owner` call in between |
-| `mcp-client-supplied-scope-overrides-session` | S2, S6 | `org_id`/`tenant_id`/`project_id` argument used as a fallback/override for the session's own scope |
+| `mcp-client-supplied-scope-overrides-session` | S2, S6 | `org_id`/`tenant_id`/`project_id`/`user_id`/`owner_id` argument used as a fallback/override for the session's own scope |
 | `mcp-wildcard-sentinel-scope-bypass` | S4 | a `"*"`/`"all"` sentinel value bypasses scope filtering with no role check nearby |
 | `mcp-batch-resolve-missing-per-item-scope-filter` | S3 | a batch of client-supplied ids is resolved with no `.filter(...)` back to the caller's own scope |
 | `mcp-admin-named-tool-missing-role-check` | S5 | a tool named `*admin*` never calls a role-check function in its handler |
@@ -58,6 +58,46 @@ missing-check pattern found," not "no S1/S5-class bug exists."
 S2/S3/S4/S6 don't have this problem because their bug is about an
 *unconditional* fallback/sentinel/missing-filter shape, not a conditionally-
 present check call — those rules match the runtime toggle correctly.
+
+## A real-world referent — and what it caught the rules missing
+
+This lab is vulnerable-by-design, so the fair question is whether the bug class
+shows up in software people actually deploy. It does, with a CVE number:
+
+**[CVE-2026-9135](https://nvd.nist.gov/vuln/detail/CVE-2026-9135)** (IBM
+Langflow OSS, CVSS 9.9). Alongside a code-injection flaw, NVD's description
+records that the attack *"can be escalated through cross-tenant flow
+manipulation via the agentic MCP `update_flow_component_field` tool, which
+accepts attacker-controlled `user_id` parameters, enabling attackers to inject
+malicious code into victim users' flows."*
+
+A caller-supplied identity argument selecting whose data a tool operates on is
+scenario **S2** exactly — the same shape as the lab's `org_id || session.orgId`,
+one word different.
+
+**And the rule did not catch it.** `mcp-client-supplied-scope-overrides-session`
+enumerated tenant-scope parameter names — `org_id`, `tenant_id`, `project_id`,
+`account_id`, `workspace_id` — and `user_id` was not among them. Because
+`patterns` is an AND, a failing `metavariable-regex` means the rule cannot fire
+at all, however well the code shape matches. Measured before the fix: a probe
+carrying `user_id ||`, `user_id ??` and `owner_id ||` produced **zero**
+findings, while the `org_id` control in the same file fired.
+
+`user_id`/`owner_id` (and their camelCase forms) are now in the list, with a
+vulnerable + fixed fixture pair for each. Two things worth taking from this
+beyond the one-line fix:
+
+- An allow/deny list of *names* is a guess about what the next codebase will
+  call the thing. It fails silently and completely — no partial match, no
+  warning, just a clean scan.
+- The first public CVE of this class used the spelling the rule did not have.
+  If you adapt these rules, start by auditing that regex against your own
+  parameter vocabulary rather than trusting the defaults.
+
+CVE-2026-9135 is Python; these rules are JavaScript/TypeScript, so they could
+not have scanned Langflow itself. The CVE is cited as evidence that the *shape*
+occurs in production MCP tooling, not as something this ruleset would have
+found in place.
 
 ## Why this exists (vs. just using the hands-on lab)
 
