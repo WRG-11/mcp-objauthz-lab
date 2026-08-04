@@ -23,6 +23,18 @@ single tool and you have a cross-tenant read, write, or delete — regardless of
 how good the prompt-injection defenses are. Catching it takes *reading the
 authorization on each tool*, which is exactly the muscle this lab trains.
 
+This isn't theoretical. Asana's MCP connector (Jun 2025) leaked data across
+tenant boundaries for roughly 1,000 customer organizations — a breakdown in
+tenant isolation, the same shape of bug as S1-S6 below
+([Pomerium's writeup](https://www.pomerium.com/blog/asanas-ai-connector-leak-exposed-sensitive-data-across-organizations-what-it-means-for-mcp-security)).
+And n8n-mcp — a popular MCP server with 20k+ GitHub stars — shipped
+[CVE-2026-54052](https://www.manifold.security/blog/n8n-mcp-idor-cross-tenant-credential-theft)
+(CVSS 9.6): sequential integer ids on a table missing a tenant-id column let
+any caller read or delete another tenant's stored API keys. Neither would
+have been caught by a prompt-injection scanner — both are S1/S3-shaped bugs
+(this lab's "missing check on one tool" and "list vs. get asymmetry"
+scenarios), just in production instead of a lab.
+
 ## Try the challenges
 
 Six hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
@@ -300,6 +312,20 @@ rules — one per code shape above — that flag these patterns in **your own**
 MCP server source, not just this lab's. Honestly documented: they catch 4 of
 6 scenarios when run against this lab's own runtime-toggle source (a real,
 disclosed limitation, not a lab artifact — see the linked README for why).
+
+Drop it into your own MCP server's CI as a GitHub Action. Findings upload to
+your repo's Security tab, so the calling workflow needs
+`security-events: write`:
+
+```yaml
+permissions:
+  security-events: write   # only needed for the SARIF upload
+
+steps:
+  - uses: WRG-11/mcp-objauthz-lab@main
+    with:
+      path: src/   # your MCP server source
+```
 
 ## How it is built
 
