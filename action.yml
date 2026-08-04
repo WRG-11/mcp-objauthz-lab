@@ -1,0 +1,59 @@
+name: 'MCP Object-Level Authorization Scanner'
+description: >-
+  Scan MCP server source for object-level / cross-tenant authorization bugs
+  (BOLA/IDOR, CWE-639/862/863) using the mcp-objauthz-lab Semgrep rule-set.
+author: 'WRG-11'
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  path:
+    description: 'Path to your MCP server source to scan'
+    required: false
+    default: '.'
+  upload-sarif:
+    description: >-
+      Upload results to the GitHub Security tab. Requires the calling
+      workflow to grant `security-events: write`.
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.12'
+
+    - name: Install semgrep
+      shell: bash
+      run: pip install --quiet semgrep
+
+    - name: Run MCP object-authz scan (SARIF)
+      shell: bash
+      run: |
+        semgrep --config "${{ github.action_path }}/detection/semgrep/mcp-object-authz.yml" \
+          "${{ inputs.path }}" --no-git-ignore --sarif \
+          --output=mcp-objauthz-results.sarif
+
+    - name: Upload SARIF to GitHub Security tab
+      if: inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@e60ea984bd3baa95954f2856bcf24f9eaba46637 # v3
+      with:
+        sarif_file: mcp-objauthz-results.sarif
+
+    - name: Fail if findings present
+      shell: bash
+      run: |
+        count=$(python3 -c "
+        import json
+        d = json.load(open('mcp-objauthz-results.sarif', encoding='utf-8'))
+        print(sum(len(r['results']) for r in d['runs']))
+        ")
+        echo "object-level authorization findings: $count"
+        if [ "$count" -gt 0 ]; then
+          echo "::error::$count object-level authorization finding(s) — see the Security tab (or rerun with --sarif locally) for detail."
+          exit 1
+        fi
