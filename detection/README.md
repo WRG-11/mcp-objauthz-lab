@@ -27,6 +27,24 @@ pip install semgrep
 semgrep --config detection/semgrep/mcp-object-authz.yml <path-to-your-mcp-server>
 ```
 
+Or as a GitHub Action, no local install needed — add this step to your own
+MCP server's CI (requires `security-events: write` for the SARIF upload):
+
+```yaml
+permissions:
+  security-events: write
+
+steps:
+  - uses: WRG-11/mcp-objauthz-lab@main
+    with:
+      path: src/   # your MCP server source
+```
+
+The action installs semgrep, runs this same rule-set producing SARIF,
+uploads it to your repo's Security tab (set `upload-sarif: false` to skip),
+then fails the job if any finding is present. See
+[`action.yml`](../action.yml) at the repo root.
+
 ## Honest results — this is not a magic bullet
 
 Two ways this was validated, with different outcomes, both worth knowing

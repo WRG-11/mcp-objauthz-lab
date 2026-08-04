@@ -76,3 +76,23 @@ jobs:
               process.exit(1);
             }
           '
+
+  dogfood-action-on-self:
+    name: dogfood — run action.yml against this lab's own (vulnerable) src/
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    # RED IS EXPECTED HERE. src/ is intentionally vulnerable by design (see
+    # README) — a red X on this job is live proof the action actually
+    # detects the bug class end-to-end, not a broken workflow. continue-on-
+    # error keeps it from blocking the rest of CI on that expected failure.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: run the action against this repo's own src/
+        uses: ./
+        with:
+          path: src/
+          # src/ is intentionally vulnerable; don't pollute the real
+          # Security tab with lab findings that aren't actual repo bugs.
+          upload-sarif: 'false'
