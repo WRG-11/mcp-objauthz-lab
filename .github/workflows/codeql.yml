@@ -57,6 +57,19 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-and-quality
+          # detection/semgrep/fixtures/ holds the vuln/ok pairs the semgrep
+          # rules are tested against — minimal snippets that exist to be
+          # pattern-matched, not to run. The first scan returned 15 alerts and
+          # all 15 were `js/unused-local-variable` (a quality rule, no security
+          # severity) in exactly those files: a declared-but-unused binding is
+          # what a fixture IS. Scanning test data as if it were product code is
+          # the same mistake the sibling monorepo's bandit sweep made with
+          # pytest scratch. `detection/` holds nothing else the JS extractor
+          # reads (one README.md, one semgrep .yml), so this ignores the five
+          # fixtures and nothing more.
+          config: |
+            paths-ignore:
+              - detection/semgrep/fixtures/**
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38  # v4.37.4
