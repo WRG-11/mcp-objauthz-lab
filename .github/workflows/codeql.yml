@@ -1,0 +1,64 @@
+name: CodeQL
+
+# CodeQL static security analysis for this lab's JavaScript.
+#
+# The repository is a deliberately-vulnerable MCP object-authorization lab:
+# `src/` holds the server (server.js, auth.js, store.js, tools.js), `poc/`
+# the exploit that demonstrates the missing check, and `test/` the pure-function
+# unit tests. `challenges/` and `solutions/` carry the exercise material.
+#
+# Two consequences for this workflow, both intentional:
+#
+#   * `build-mode: none` — there is no build step. The runtime deps
+#     (@modelcontextprotocol/sdk, zod) are declared but not required to analyze
+#     the sources; CodeQL's JS extractor reads them directly.
+#   * The lab's *intended* vulnerability lives in `src/` by design, so a finding
+#     here is not automatically a defect. Read the alert against the challenge
+#     it belongs to before acting: the point of the scan is to catch the flaws
+#     nobody planted.
+#
+# Runs on every push / PR to the default branch plus a weekly scheduled scan.
+# Findings surface in the repo Security tab -> Code scanning alerts.
+#
+# Verified before landing: `code-scanning/default-setup` reports
+# `state: not-configured` on this repo, so this advanced workflow is the one
+# that runs. Enabling default setup later would silently disable it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'  # Monday 03:00 UTC
+
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF results
+
+jobs:
+  analyze:
+    name: Analyze (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38  # v4.37.4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-and-quality
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38  # v4.37.4
+        with:
+          category: "/language:${{ matrix.language }}"
