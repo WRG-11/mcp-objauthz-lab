@@ -16,3 +16,22 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci(deps)"
+    # codeql-action's sub-actions MUST move together. Ungrouped, dependabot
+    # opens one PR per sub-action and each carries only its own bump, so a
+    # branch can run `init` at one version against `analyze` at another --
+    # a version skew CodeQL fails on.
+    #
+    # Measured 2026-08-13 on the three open ungrouped PRs:
+    #   #17 init 4.37.4 -> 4.37.6         Analyze: FAILURE
+    #   #19 analyze 4.37.4 -> 4.37.6      Analyze: FAILURE
+    #   #18 upload-sarif (action.yml)     Analyze: SUCCESS   <- different file,
+    #                                     no skew, so it passes
+    # The sibling repos that already group this (osint-trust-envelope,
+    # devguard-scan) have green CodeQL on the same bump.
+    #
+    # Pattern matches the siblings': `codeql-action*`, not `codeql-action/*`,
+    # so the top-level action is covered alongside its sub-actions.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
