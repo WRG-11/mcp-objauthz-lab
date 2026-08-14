@@ -78,21 +78,52 @@ jobs:
           '
 
   dogfood-action-on-self:
-    name: dogfood — run action.yml against this lab's own (vulnerable) src/
+    name: dogfood — the action must FIND the planted vulnerabilities in src/
     runs-on: ubuntu-latest
     permissions:
       security-events: write
-    # RED IS EXPECTED HERE. src/ is intentionally vulnerable by design (see
-    # README) — a red X on this job is live proof the action actually
-    # detects the bug class end-to-end, not a broken workflow. continue-on-
-    # error keeps it from blocking the rest of CI on that expected failure.
-    continue-on-error: true
+    # src/ is intentionally vulnerable by design (see README), so the action
+    # exiting 1 here is the SUCCESS case, not the failure case. This job used
+    # to let that exit code stand as the job result under continue-on-error,
+    # which inverted the signal: a working detector painted the job red, and a
+    # detector that silently stopped finding anything — a broken ruleset, a
+    # semgrep that scanned the wrong path — exited 0 and painted it GREEN. The
+    # one outcome that must never pass quietly was the only one that did.
+    #
+    # So the scan's exit code is absorbed at the STEP (expected), and the job
+    # result comes from an assertion that separates three outcomes a bare exit
+    # code cannot: no SARIF at all (the scan never ran), SARIF with zero
+    # findings (the detector is broken, not the tree clean), and SARIF with
+    # findings (working). Green now means "proven end-to-end".
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: run the action against this repo's own src/
+        id: scan
+        # Expected: the action exits 1 on findings, and findings are the point.
+        continue-on-error: true
         uses: ./
         with:
           path: src/
           # src/ is intentionally vulnerable; don't pollute the real
           # Security tab with lab findings that aren't actual repo bugs.
           upload-sarif: 'false'
+
+      - name: assert the detector actually fired
+        shell: bash
+        run: |
+          sarif="$GITHUB_WORKSPACE/mcp-objauthz-results.sarif"
+          if [ ! -f "$sarif" ]; then
+            echo "::error::no SARIF produced — the scan never ran (scan step outcome: ${{ steps.scan.outcome }}). This is a broken workflow, not a clean tree."
+            exit 1
+          fi
+          count=$(python3 -c "
+          import json, sys
+          d = json.load(open(sys.argv[1], encoding='utf-8'))
+          print(sum(len(r['results']) for r in d['runs']))
+          " "$sarif")
+          echo "planted-vulnerability findings: $count"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::the detector found NOTHING in an intentionally vulnerable tree — the ruleset or its wiring is broken. An empty result here is a regression, never a pass."
+            exit 1
+          fi
+          echo "OK: the action flagged $count finding(s) end-to-end against src/"
