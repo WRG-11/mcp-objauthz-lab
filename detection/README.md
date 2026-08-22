@@ -51,14 +51,14 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **6/6 rules fire
+minimal vulnerable snippet and one fixed snippet per rule. **7/7 rules fire
 on the vulnerable snippet and stay silent on the fixed one.** This is the
 correctness bar every rule was iterated against.
 
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **4 of 6 scenarios flagged (S2, S3, S4, S6). S1 and S5
+ruleset against it: **5 of 7 scenarios flagged (S2, S3, S4, S6, S7). S1 and S5
 are missed.**
 
 Why S1/S5 are missed: both rules work by checking that no authorization

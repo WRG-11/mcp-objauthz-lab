@@ -9,8 +9,10 @@
 // AUTHORIZATION (may you touch THIS object?) is the interesting part and the
 // subject of the lab: requireOrgAccess() enforces that an object belongs to the
 // caller's org, and requireAdminRole() enforces the cross-tenant escape hatch.
-// The bugs are the six tools that skip, bypass or short-circuit one of those
-// checks — one per scenario S1-S6. See src/tools.js.
+// The bugs are the tools that skip, bypass or short-circuit one of those
+// checks — except S7, which uses neither: its authorization IS the tenant
+// key inside a scoped query, and the bug is leaving that key out. One per
+// scenario S1-S7. See src/tools.js.
 
 /** Raised when a token is unknown / the session cannot be established. */
 export class AuthnError extends Error {}

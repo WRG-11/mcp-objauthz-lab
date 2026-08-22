@@ -4,6 +4,46 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-08-22
+
+### Added
+
+- **Scenario S7 — "The Missing Key" (`note_get_by_query`).** The lab taught only
+  one shape of object-authz bug: resolve an object by id, then forget a separate
+  `requireOrgAccess()` call (S1). Real MCP servers rarely look like that. They
+  bind the tenant into the query — `repo.findOneBy({ id, workspaceId })` — and
+  the bug is quieter: the tenant key is simply left out of the filter. There is
+  no guard call to be missing, which is exactly why a guard-call review walks
+  past it. This is the shape **CVE-2026-54052** (n8n, CVSS 9.6) took. S7 plants
+  that omission (`store.findNoteBy({ id })` in vuln, `{ id, orgId }` in fixed),
+  with a challenge, a solution, a two-way PoC row, and three unit tests.
+
+  The scenario was written after auditing four production MCP servers
+  (activepieces, Directus, Flowise, n8n) for this class. All four were clean, and
+  all four defend the same way — the tenant identity comes from the authenticated
+  session and is bound into the query — which is now documented in
+  `solutions/s7.md` as field-grounded "how real servers get this right."
+
+- **Detection rule `mcp-unscoped-query-object-fetch`** for the S7 shape. It flags
+  a repository fetch (`findOneBy` / `findOne({ where })` / `delete` / `softDelete`)
+  whose filter carries an `id` but no tenant-shaped key, and stays silent when a
+  tenant key (`workspaceId` / `projectId` / `orgId` / …) is bound. Unlike the
+  other six rules it is **WARNING, not ERROR**: a single call cannot prove the
+  entity is tenant-scoped, so it flags the shape for review rather than asserting
+  a bug. Measured review rate on the four audited servers: 0 on activepieces and
+  Directus, a handful each on Flowise and n8n that all resolved to safe on
+  reading. Still **zero findings against the official `@modelcontextprotocol/sdk`**
+  (168 files), so the headline benchmark holds across all seven rules.
+
+### Changed
+
+- CI's fixture-count gate moves 14 → 17 (11 JavaScript + 6 Python).
+- Detection coverage against the lab's own runtime-toggle source is now **5 of 7
+  scenarios** (S2, S3, S4, S6, S7); S1 and S5 remain uncaught for the reason
+  `detection/README.md` documents.
+- Version realigned to 3.3.0 across `package.json`, `package-lock.json` and
+  `CITATION.cff` (they trailed at 3.2.0 while the last published tag was v3.2.1).
+
 ## [3.2.0] - 2026-08-22
 
 ### Added

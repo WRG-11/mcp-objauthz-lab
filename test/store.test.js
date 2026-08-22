@@ -167,3 +167,27 @@ test("searchNotesByOrg: no match returns an empty array", () => {
   const store = createStore();
   assert.deepEqual(store.searchNotesByOrg("org_acme", "nonexistent-term-xyz"), []);
 });
+
+// ── findNoteBy (the S7 query-scoped surface) ────────────────────────────────
+// findNoteBy matches on EVERY key in the filter. This is what makes the S7
+// bug (omitting the tenant key) and its fix (binding it) two lines apart.
+
+test("findNoteBy: { id } alone matches regardless of org (the S7 omission)", () => {
+  const store = createStore();
+  // n_globex_1 belongs to org_globex; a filter with only id still resolves it.
+  const note = store.findNoteBy({ id: "n_globex_1" });
+  assert.equal(note.orgId, "org_globex");
+});
+
+test("findNoteBy: { id, orgId } bound to the wrong org resolves to nothing (the S7 fix)", () => {
+  const store = createStore();
+  // A caller in org_acme fetching a Globex note WITH the tenant key bound.
+  const note = store.findNoteBy({ id: "n_globex_1", orgId: "org_acme" });
+  assert.equal(note, undefined);
+});
+
+test("findNoteBy: { id, orgId } bound to the right org resolves the note", () => {
+  const store = createStore();
+  const note = store.findNoteBy({ id: "n_globex_1", orgId: "org_globex" });
+  assert.equal(note.id, "n_globex_1");
+});
