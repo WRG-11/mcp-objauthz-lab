@@ -69,6 +69,11 @@ jobs:
           semgrep --config detection/semgrep/mcp-object-authz.yml \
             detection/semgrep/fixtures/ --no-git-ignore --quiet --json \
             --output=/tmp/semgrep-fixtures.json
+          # NOTE: everything below is inside a single-quoted shell string.
+          # One apostrophe ("fixture's") closes it early and the rest is
+          # parsed as bash -- which is how this job failed on 2026-08-22
+          # with "syntax error near unexpected token '('", nothing to do
+          # with semgrep or the rules.
           node -e '
             const d = JSON.parse(require("fs").readFileSync("/tmp/semgrep-fixtures.json", "utf8"));
             const got = d.results.length;
@@ -81,7 +86,7 @@ jobs:
                              //   (the last two added after CVE-2026-9135 --
                              //   see detection/README.md).
                              //   Python (6): three rules carry python, plus the
-                             //   -py-ternary companion. The wildcard fixture's two
+                             //   -py-ternary companion. In the wildcard fixture, two
                              //   negative cases (a tokenizer, a glob compare) stay
                              //   deliberately silent -- they are the half that
                              //   proves the name filter still holds.
