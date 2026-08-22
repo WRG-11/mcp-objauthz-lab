@@ -10,7 +10,7 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing eleven MCP tools across **six independent
+It is a multi-tenant note server exposing twelve MCP tools across **seven independent
 BOLA scenarios**. Each scenario is a different variant of the same bug class, toggled
 by its own environment variable. Run them all at once or isolate one at a time.
 
@@ -27,7 +27,7 @@ authorization on each tool*, which is exactly the muscle this lab trains.
 
 This isn't theoretical. Asana's MCP connector (Jun 2025) leaked data across
 tenant boundaries for roughly 1,000 customer organizations — a breakdown in
-tenant isolation, the same shape of bug as S1-S6 below
+tenant isolation, the same shape of bug as S1-S7 below
 ([Pomerium's writeup](https://www.pomerium.com/blog/asanas-ai-connector-leak-exposed-sensitive-data-across-organizations-what-it-means-for-mcp-security)).
 And n8n-mcp — a popular MCP server with 20k+ GitHub stars — shipped
 [CVE-2026-54052](https://www.manifold.security/blog/n8n-mcp-idor-cross-tenant-credential-theft)
@@ -39,7 +39,7 @@ scenarios), just in production instead of a lab.
 
 ## Try the challenges
 
-Six hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+Seven hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
 until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
@@ -50,6 +50,7 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S4](challenges/s4.md) | Wildcard/sentinel value bypasses scope filter |
 | [S5](challenges/s5.md) | Role/token-type bypass — admin-named tool, no role check |
 | [S6](challenges/s6.md) | Foreign-parent injection — create trusts a caller-supplied org |
+| [S7](challenges/s7.md) | Unscoped query — tenant key omitted from the filter (the real-world shape) |
 
 ## Quickstart (< 5 minutes)
 
@@ -58,13 +59,13 @@ Requirements: **Node.js ≥ 20**.
 ```bash
 npm install
 npm test    # 39 unit tests — auth.js/store.js in isolation
-npm run poc # 17-row two-way gate — the tools wired end-to-end over MCP
+npm run poc # 19-row two-way gate — the tools wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (17/17 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (19/19 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (6 scenarios + hardened build)
+MCP object-level authorization lab — two-way gate (7 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -82,10 +83,12 @@ MCP object-level authorization lab — two-way gate (6 scenarios + hardened buil
   S5   fixed  note_admin_get cross-org as Dana (real admin)  ALLOWED   ALLOWED   ✓
   S6   vuln   note_create_in_org org_id=org_globex (Alice)   INJECTED  INJECTED  ✓
   S6   fixed  note_create_in_org org_id=org_globex (Alice)   SCOPED    SCOPED    ✓
+  S7   vuln   note_get_by_query cross-tenant (Alice→Globex)  LEAKED    LEAKED    ✓
+  S7   fixed  note_get_by_query cross-tenant (Alice→Globex)  DENIED    DENIED    ✓
   ALL  fixed  9 cross-tenant routes (Bob→Acme)               BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (17/17 rows OK)
+  Two-way gate: PASS (19/19 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -95,7 +98,7 @@ same-org access still works (no false positive).
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
-access (an admin's cross-org read, a user's own note) still working. Each S1-S6
+access (an admin's cross-org read, a user's own note) still working. Each S1-S7
 arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
 without these rows the hardened build the section below tells you to run would
 have no coverage at all.
@@ -118,7 +121,7 @@ delete any org's note** by knowing or guessing its id.
 caller in one org delete another org's note. Which one, and what makes it
 different?
 
-> The server exposes eleven tools in total; the other five belong to S3-S6 and
+> The server exposes twelve tools in total; the other six belong to S3-S7 and
 > are vulnerable in their own default state. Run
 > [`challenges/s1.md`](challenges/s1.md)'s Setup command, which pins them to
 > `fixed`, or this scenario has more than one answer.
@@ -307,13 +310,55 @@ but ignores it; the note is always created inside `session.orgId`.
 
 ---
 
+## Scenario S7 — Unscoped query
+
+**Tool:** `note_get_by_query`  
+**Class:** CWE-639 — tenant key omitted from a scoped query  
+**Toggle:** `LAB_S7`
+
+S1's outlier is a **missing guard call**: resolve a note by id, then forget to
+call `requireOrgAccess`. Real MCP servers rarely look like that. They bind the
+tenant *into* the query — `repo.findOneBy({ id, workspaceId })` — so there is no
+separate guard line to omit. The bug in that world is quieter: the tenant key is
+simply left out of the filter, and the query matches on `id` alone.
+
+This is the shape **CVE-2026-54052** (n8n, CVSS 9.6) took — a table fetched by a
+sequential id with the tenant column left out of the `WHERE`, letting any caller
+read another tenant's stored secrets. It is also the pattern this lab's own
+detection rule (`mcp-unscoped-query-object-fetch`) was written to catch, because
+a guard-call detector never sees it: there is no guard call to be missing.
+
+**Challenge:** Alice (org Acme) wants to read a Globex note by its id through
+`note_get_by_query`, despite never being a Globex member. Why does it work?
+
+<details>
+<summary>Hint</summary>
+
+The tool resolves the note through a filtered query. What does the filter
+contain in vuln mode — and what one key is missing from it?
+</details>
+
+<details>
+<summary>Answer</summary>
+
+In `LAB_S7=vuln` the tool calls `store.findNoteBy({ id })` — the filter carries
+only the caller-supplied `id`, so the query matches any note with that id
+regardless of org, and Alice reads Globex's note. The fix (`LAB_S7=fixed`) binds
+the tenant key into the same query: `store.findNoteBy({ id, orgId: session.orgId })`,
+so a cross-org id resolves to nothing. Note there is no `requireOrgAccess` call
+in either build — the authorization *is* the tenant key in the filter, which is
+exactly why the S1-style "look for the missing guard" reflex walks past it.
+</details>
+
+---
+
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 6 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 7 [Semgrep](https://semgrep.dev)
 rules — one per code shape above — that flag these patterns in **your own**
 MCP server source, not just this lab's. Three of them run against **Python as
 well as JavaScript/TypeScript**, which matters because the reference MCP SDKs
-ship in both. Honestly documented: they catch 4 of 6 scenarios when run
+ship in both. Honestly documented: they catch 5 of 7 scenarios when run
 against this lab's own runtime-toggle source (a real, disclosed limitation,
 not a lab artifact — see the linked README for why), and they produce **zero
 findings** against the official `@modelcontextprotocol/sdk` — 168 files of
@@ -339,9 +384,9 @@ steps:
 |---|---|
 | [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
 | [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
-| [`src/tools.js`](src/tools.js) | Eleven tools. Six planted-bug tools (one per scenario). |
+| [`src/tools.js`](src/tools.js) | Twelve tools. Seven planted-bug tools (one per scenario). |
 | [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S6` env vars, passes a `modes` object to `registerTools`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 17-row two-way gate: all 6 scenarios in isolation, plus the all-`fixed` hardened build. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 19-row two-way gate: all 7 scenarios in isolation, plus the all-`fixed` hardened build. |
 | [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (39 tests, no MCP transport involved). |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
@@ -433,7 +478,7 @@ The most useful contribution to a detection ruleset is a **false positive** —
 a rule that fires on correctly authorized code. A gate wider than the defect
 it targets gets switched off, and a switched-off rule protects nothing, so
 those are treated as real defects here. Misses are just as welcome; the rules
-catch 4 of the 6 scenarios against this lab's own source and
+catch 5 of the 7 scenarios against this lab's own source and
 [`detection/README.md`](detection/README.md) says why.
 
 There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has

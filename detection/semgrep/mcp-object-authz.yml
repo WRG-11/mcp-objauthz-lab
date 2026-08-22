@@ -274,3 +274,57 @@ rules:
       confidence: MEDIUM
       references:
         - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-unscoped-query-object-fetch
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      An object is fetched by id through a query filter that carries no tenant
+      key (workspaceId / projectId / organizationId / orgId / tenantId /
+      accountId / userId / ownerId). If the entity is multi-tenant, the query
+      matches on id alone and any caller's id resolves regardless of tenant --
+      the query-scoped form of object-level authorization failure (BOLA / IDOR,
+      CWE-639). This is the shape CVE-2026-54052 (n8n, CVSS 9.6) took: a table
+      fetched by a sequential id with the tenant column left out of the WHERE.
+      Bind the tenant key into the same filter, sourced from the session, e.g.
+      findOneBy({ id, workspaceId }). A guard-call detector never sees this,
+      because there is no guard call to be missing -- the authorization is the
+      tenant key inside the filter. Confirm the entity is genuinely
+      tenant-scoped before treating this as a bug (a globally-owned table is a
+      true negative).
+    #
+    # Deliberately WARNING, not ERROR: unlike the other rules, this one cannot
+    # prove the entity is tenant-scoped from a single call -- a genuinely global
+    # table fetched by id is a true negative, and only cross-call context (does
+    # this entity carry a tenant column elsewhere? does a caller re-check?) can
+    # tell the two apart. So it flags the SHAPE and asks for a manual read
+    # rather than asserting a bug. Measured review rate is real: against four
+    # audited-clean production servers it raised 0 (activepieces, directus) and
+    # a handful each (flowise, n8n) that all resolved to safe on reading. The
+    # fixtures pin both halves: the tenant-key-bound form stays silent.
+    patterns:
+      - pattern-either:
+          - pattern: "$REPO.findOneBy($FILTER)"
+          - pattern: "$REPO.findNoteBy($FILTER)"
+          - pattern: "$REPO.findOne({ where: $FILTER })"
+          - pattern: "$REPO.delete($FILTER)"
+          - pattern: "$REPO.softDelete($FILTER)"
+      - metavariable-pattern:
+          metavariable: $FILTER
+          pattern: "{ id: $ID }"
+      # exclude when the filter also carries a tenant-shaped key (scope bound)
+      - pattern-not:
+          patterns:
+            - pattern-either:
+                - pattern: "$REPO.$M({ ..., $KEY: $V })"
+                - pattern: "$REPO.findOne({ where: { ..., $KEY: $V } })"
+            - metavariable-regex:
+                metavariable: $KEY
+                regex: (?i)^(workspaceId|projectId|organizationId|orgId|tenantId|accountId|userId|ownerId|teamId|realmId|namespaceId)$
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: LOW
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+

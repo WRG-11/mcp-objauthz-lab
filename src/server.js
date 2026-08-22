@@ -9,6 +9,7 @@
 //   LAB_S4             — S4: note_export wildcard org_id="*" bypasses scope ("sentinel bypass")
 //   LAB_S5             — S5: note_admin_get has no role check ("role/token-type bypass")
 //   LAB_S6             — S6: note_create_in_org trusts caller-supplied org_id ("foreign-parent injection")
+//   LAB_S7             — S7: note_get_by_query omits the tenant key from the filter ("unscoped query")
 //
 // Each scenario is independent: set all to "fixed" to run the fully hardened server,
 // or mix vuln/fixed to isolate one scenario at a time.
@@ -44,6 +45,7 @@ const modes = {
   s4: fixed(process.env.LAB_S4) ? "fixed" : "vuln",
   s5: fixed(process.env.LAB_S5) ? "fixed" : "vuln",
   s6: fixed(process.env.LAB_S6) ? "fixed" : "vuln",
+  s7: fixed(process.env.LAB_S7) ? "fixed" : "vuln",
 };
 
 const server = new McpServer({
@@ -59,5 +61,5 @@ await server.connect(transport);
 
 // stderr only — never stdout (that is the protocol channel).
 console.error(
-  `[mcp-objauthz-lab] up  S1=${modes.s1}  S2=${modes.s2}  S3=${modes.s3}  S4=${modes.s4}  S5=${modes.s5}  S6=${modes.s6}`,
+  `[mcp-objauthz-lab] up  S1=${modes.s1}  S2=${modes.s2}  S3=${modes.s3}  S4=${modes.s4}  S5=${modes.s5}  S6=${modes.s6}  S7=${modes.s7}`,
 );

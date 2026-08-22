@@ -77,6 +77,17 @@ export function createStore() {
 
     getNote: (id) => notes.get(id),
 
+    // ── S7 surface ──────────────────────────────────────────────────────────
+    // Shaped like an ORM repository's findOneBy({ ... }): it matches on EVERY
+    // key in the filter. Pass { id } and any note with that id matches; pass
+    // { id, orgId } and the org must match too. This is the query-scoped shape
+    // real MCP servers use (Flowise `findOneBy({ id, workspaceId })`, n8n,
+    // Directus). S7's planted bug omits the tenant key from the filter.
+    findNoteBy: (filter) =>
+      [...notes.values()].find((n) =>
+        Object.entries(filter).every(([k, v]) => n[k] === v),
+      ),
+
     createNote: ({ orgId, ownerId, title, body }) => {
       const id = `n_${++seq}`;
       const note = { id, orgId, ownerId, title, body: body ?? "" };

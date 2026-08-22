@@ -1,4 +1,4 @@
-// MCP tool definitions — 6 independent BOLA scenarios across 11 tools.
+// MCP tool definitions — 7 independent BOLA scenarios across 12 tools.
 //
 // Tool inventory:
 //
@@ -336,6 +336,44 @@ export function registerTools(server, store, modes) {
         title,
         body,
       });
+      return ok(note);
+    }),
+  );
+  // ── S7: note_get_by_query ─────────────────────────────────────────────────
+  // UNSCOPED-QUERY BOLA (CWE-639) — the query-scoped shape.
+  //
+  // S1's outlier hides a MISSING guard *call* (resolve-by-id, then forget
+  // requireOrgAccess). Real MCP servers rarely look like that. They bind the
+  // tenant INTO the query: `repo.findOneBy({ id, workspaceId })`. The bug in
+  // that world is quieter — the tenant key is simply left out of the filter,
+  // so the WHERE matches on id alone and any caller's id resolves regardless
+  // of org. There is no missing guard line to spot; the omission is one key
+  // inside an object.
+  //
+  // This is the shape CVE-2026-54052 (n8n, CVSS 9.6) took: a table fetched by
+  // a sequential id with the tenant column left out of the query, letting any
+  // caller read another tenant's stored secrets. A guard-call detector (S1)
+  // never sees it, because there is no guard call to be missing.
+  //
+  // S7 vuln:  store.findNoteBy({ id })                        — tenant key omitted
+  // S7 fixed: store.findNoteBy({ id, orgId: session.orgId })  — tenant key bound
+  server.registerTool(
+    "note_get_by_query",
+    {
+      description:
+        "Fetch a single note by id, resolved through a filtered store query.",
+      inputSchema: {
+        token: z.string(),
+        id: z.string(),
+      },
+    },
+    guard(async ({ token, id }) => {
+      const session = resolveSession(store, token);
+      const note =
+        modes.s7 === "vuln"
+          ? store.findNoteBy({ id })
+          : store.findNoteBy({ id, orgId: session.orgId });
+      if (!note) notFound(id);
       return ok(note);
     }),
   );
