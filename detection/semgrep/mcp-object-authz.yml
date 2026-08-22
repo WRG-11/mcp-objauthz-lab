@@ -1,6 +1,6 @@
 rules:
   - id: mcp-missing-object-authz-check
-    languages: [javascript, typescript]
+    languages: [javascript, typescript, python]
     severity: ERROR
     message: >
       An object resolved from storage by a client-supplied id reaches a
@@ -32,7 +32,17 @@ rules:
       - pattern-not: |
           $OBJ = $STORE.$GETMETHOD($ID);
           ...
+          require_org_access(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
           requireOwnership(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          require_ownership(...);
           ...
       - pattern-not: |
           $OBJ = $STORE.$GETMETHOD($ID);
@@ -42,7 +52,17 @@ rules:
       - pattern-not: |
           $OBJ = $STORE.$GETMETHOD($ID);
           ...
+          require_access(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
           checkAccess(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          check_access(...);
           ...
       - pattern-not: |
           $OBJ = $STORE.$GETMETHOD($ID);
@@ -52,7 +72,17 @@ rules:
       - pattern-not: |
           $OBJ = $STORE.$GETMETHOD($ID);
           ...
+          check_ownership(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
           assertOwner(...);
+          ...
+      - pattern-not: |
+          $OBJ = $STORE.$GETMETHOD($ID);
+          ...
+          assert_owner(...);
           ...
     metadata:
       cwe: ["CWE-639", "CWE-862"]
@@ -62,7 +92,7 @@ rules:
         - https://github.com/WRG-11/mcp-objauthz-lab
 
   - id: mcp-client-supplied-scope-overrides-session
-    languages: [javascript, typescript]
+    languages: [javascript, typescript, python]
     severity: ERROR
     message: >
       A client-supplied scope or identity argument can override the
@@ -92,7 +122,7 @@ rules:
         - https://github.com/WRG-11/mcp-objauthz-lab
 
   - id: mcp-wildcard-sentinel-scope-bypass
-    languages: [javascript, typescript]
+    languages: [javascript, typescript, python]
     severity: ERROR
     message: >
       A magic "all"/"*" sentinel value on a scope parameter is honored
@@ -107,14 +137,32 @@ rules:
           - pattern: '$PARAM === "all"'
           - pattern: '$PARAM == "*"'
           - pattern: '$PARAM == "all"'
+      - metavariable-regex:
+          # `==` is JavaScript's secondary equality operator but Python's ONLY
+          # one, so without this filter the rule matches any literal "*"
+          # comparison. Measured on a real 215-file Python MCP server: two
+          # findings, both a tokenizer doing `ch == "*"`, both false. These are
+          # the identifiers the message above already names; both JavaScript
+          # call sites in this lab use `org_id`, so JS coverage is unchanged.
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
       - pattern-not-inside: |
           requireAdminRole(...);
+          ...
+      - pattern-not-inside: |
+          require_admin_role(...);
           ...
       - pattern-not-inside: |
           checkAdminRole(...);
           ...
       - pattern-not-inside: |
+          check_admin_role(...);
+          ...
+      - pattern-not-inside: |
           assertAdminRole(...);
+          ...
+      - pattern-not-inside: |
+          assert_admin_role(...);
           ...
     metadata:
       cwe: ["CWE-639"]
@@ -187,6 +235,41 @@ rules:
           }));
     metadata:
       cwe: ["CWE-863"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-client-supplied-scope-overrides-session-py-ternary
+    languages: [python]
+    severity: ERROR
+    message: >
+      A client-supplied scope or identity argument can override the
+      server-trusted session scope. Arguments like
+      org_id/tenant_id/project_id/user_id must never select whose data a tool
+      operates on — always use the session's own scope and ignore (or reject)
+      the caller-supplied value. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
+    #
+    # Why this is a SEPARATE rule and not another pattern on the shared one:
+    # a multi-language Semgrep rule requires every pattern to parse in every
+    # declared language, and `x if x else y` is not valid JavaScript. Adding it
+    # to the shared rule made the whole rule invalid -- and the scan still
+    # exited 0 while silently losing six findings across both languages. A
+    # partial break becomes total silence.
+    #
+    # The `or` spelling normalises to `||` and is already covered by
+    # mcp-client-supplied-scope-overrides-session. This is the other idiomatic
+    # Python form of the same defect.
+    patterns:
+      - pattern-either:
+          - pattern: "$SCOPEPARAM if $SCOPEPARAM else $SESSION.$FIELD"
+          - pattern: "$SCOPEPARAM if $SCOPEPARAM is not None else $SESSION.$FIELD"
+      - metavariable-regex:
+          metavariable: $SCOPEPARAM
+          regex: (?i)^(org|tenant|project|team|workspace|account|user|owner|group|realm|namespace)_?id$
+    metadata:
+      cwe: ["CWE-639"]
       category: security
       confidence: MEDIUM
       references:

@@ -4,12 +4,36 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.2.0] - 2026-08-22
 
 ### Added
 
+- **Python coverage for three of the object-authz rules.** The reference MCP
+  SDKs ship in TypeScript *and* Python, so a JavaScript-only ruleset could see
+  at most half the ecosystem. `mcp-missing-object-authz-check`,
+  `mcp-client-supplied-scope-overrides-session` and
+  `mcp-wildcard-sentinel-scope-bypass` now declare `python`, each with a
+  matching Python fixture carrying both the vulnerable and the guarded case.
+
+  The other two rules (`mcp-batch-resolve-missing-per-item-scope-filter`,
+  `mcp-admin-named-tool-missing-role-check`) stay JavaScript-only on purpose:
+  their exclusions are written against `server.registerTool(...)` plus an
+  arrow function, a shape that can never match Python. Declaring `python` on
+  them would add patterns that cannot fire — coverage on paper, nothing in
+  practice. Python equivalents need `@server.tool()`-shaped patterns and their
+  own fixtures, which is separate work.
+
+- **`mcp-client-supplied-scope-overrides-session-py-ternary`** — Python's
+  `x if x else y`. The `or` spelling normalises to `||` and was already
+  covered; this is the other idiomatic form of the same defect. It is a
+  separate rule rather than another pattern on the shared one because a
+  multi-language rule requires every pattern to parse in *every* declared
+  language, and this one is not valid JavaScript. Adding it to the shared rule
+  made that rule invalid — and the scan still exited 0 while silently losing
+  six findings across both languages.
+
 - **`detection/` — Semgrep static-analysis rules for the same bug class the
-  challenges teach.** Five rules (`detection/semgrep/mcp-object-authz.yml`),
+  challenges teach.** Six rules (`detection/semgrep/mcp-object-authz.yml`),
   one per code shape from S1-S6 (S2/S6 share a rule — same shape, different
   tool), each with a matching vuln/ok fixture pair in
   `detection/semgrep/fixtures/`. Complements the hands-on lab: the
@@ -27,6 +51,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and asserts the expected finding count, so a future edit that silently
   breaks a rule (over- or under-matching) fails the build the same way a
   broken two-way-gate row would.
+
+
+- **Two-way gate now covers the all-`fixed` hardened build (`ALL` rows, 15 → 17).**
+  Each S1-S6 arm pins one toggle and leaves the other five at their `vuln`
+  default — that is what makes them isolated, and it is also why the build the
+  README tells readers to run for a hardened server had no coverage at all. The
+  new arm asserts both halves on the whole server: nine cross-tenant routes as
+  an ordinary user are all blocked, and legitimate access (Dana's admin
+  cross-org read, Bob's own note) still works.
+- Verified by mutation, not assertion: disabling S4's fix so only the `"all"`
+  sentinel leaks leaves **both** S4 rows green (that arm only tries `"*"`) while
+  the `ALL` row reports `OPEN=1` and the gate exits 1. Disabling S5's fix is
+  likewise caught. The hardened build itself was measured clean before the arm
+  was written — this closes a coverage gap, not a live bug.
+
+### Changed
+
+- **`mcp-wildcard-sentinel-scope-bypass` now filters on the compared
+  identifier.** Its pattern is `$PARAM == "*"`; `==` is JavaScript's secondary
+  equality operator but Python's only one, so without a filter it matched any
+  literal `"*"` comparison. Measured against a real 215-file Python MCP
+  server: two findings, both a tokenizer doing `ch == "*"`, both false. The
+  filter keeps the identifiers the rule's own message already names
+  (`org_id`/`tenant_id`/`project_id`/`user_id`); both JavaScript call sites in
+  this lab use `org_id`, so JS coverage is unchanged.
+
+- **Every guard exclusion gained a `snake_case` twin.** The exemption list only
+  knew `requireOrgAccess`-style names, so a correctly guarded Python handler
+  calling `require_org_access(...)` was reported as vulnerable. A gate wider
+  than the defect it targets gets switched off, which protects nothing.
+
+- CI's fixture-count gate moves from 8 to 14 (8 JavaScript + 6 Python), and the
+  job's display name loses its rule count entirely. Branch protection pins a
+  required check by exact display name, so a name like "(5 rules x vuln/ok
+  pair)" stops matching the moment a rule is added -- the check never reports
+  and the default branch becomes unmergeable. The count belongs in the `want`
+  assertion, where being wrong is loud.
+
+### Verified
+
+Measured, not asserted:
+
+| target | before | after |
+|---|---|---|
+| fixtures (`ruleid:`/`ok:` annotations) | 8 JS | 8 JS + 6 Python, 26/26 annotations correct |
+| official `@modelcontextprotocol/sdk`, 168 files | 0 findings | 0 findings |
+| this lab's `src/` | 5 findings | 5 findings |
+| a real 215-file Python MCP server | 2 findings, both false | 0 findings |
+
+`semgrep --test` could not be used to check the annotations — it crashes with
+an internal `IndexError` on this platform — so they were verified by walking
+the fixtures and findings directly. A crashed test runner is not a passing one.
 
 ### Fixed
 
@@ -56,21 +132,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/workflows/ci.yml` (described only the S1 gate), `SECURITY.md` (the
   count was corrected in 3.0.0 but the prose two lines below still said "the
   planted authorization bug"), and `solutions/s1.md` ("Five tools are correct").
-
-### Added
-
-- **Two-way gate now covers the all-`fixed` hardened build (`ALL` rows, 15 → 17).**
-  Each S1-S6 arm pins one toggle and leaves the other five at their `vuln`
-  default — that is what makes them isolated, and it is also why the build the
-  README tells readers to run for a hardened server had no coverage at all. The
-  new arm asserts both halves on the whole server: nine cross-tenant routes as
-  an ordinary user are all blocked, and legitimate access (Dana's admin
-  cross-org read, Bob's own note) still works.
-- Verified by mutation, not assertion: disabling S4's fix so only the `"all"`
-  sentinel leaks leaves **both** S4 rows green (that arm only tries `"*"`) while
-  the `ALL` row reports `OPEN=1` and the gate exits 1. Disabling S5's fix is
-  likewise caught. The hardened build itself was measured clean before the arm
-  was written — this closes a coverage gap, not a live bug.
 
 ## [3.1.0] - 2026-07-16
 

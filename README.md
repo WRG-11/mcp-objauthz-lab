@@ -1,6 +1,8 @@
 # MCP Object-Authz Lab
 
 [![lab-integrity](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/codeql.yml/badge.svg)](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > A small, self-hostable, **vulnerable-by-design** [MCP](https://modelcontextprotocol.io)
 > server for learning how **object-level / cross-tenant authorization** bugs
@@ -307,11 +309,15 @@ but ignores it; the note is always created inside `session.orgId`.
 
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 5 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 6 [Semgrep](https://semgrep.dev)
 rules — one per code shape above — that flag these patterns in **your own**
-MCP server source, not just this lab's. Honestly documented: they catch 4 of
-6 scenarios when run against this lab's own runtime-toggle source (a real,
-disclosed limitation, not a lab artifact — see the linked README for why).
+MCP server source, not just this lab's. Three of them run against **Python as
+well as JavaScript/TypeScript**, which matters because the reference MCP SDKs
+ship in both. Honestly documented: they catch 4 of 6 scenarios when run
+against this lab's own runtime-toggle source (a real, disclosed limitation,
+not a lab artifact — see the linked README for why), and they produce **zero
+findings** against the official `@modelcontextprotocol/sdk` — 168 files of
+real third-party code, measured.
 
 Drop it into your own MCP server's CI as a GitHub Action. Findings upload to
 your repo's Security tab, so the calling workflow needs
@@ -420,6 +426,27 @@ same-tenant call must still succeed.
 - **Synthetic.** All orgs, users, notes, and tokens are made up. There is no
   real data, no real target, and the PoC never makes a network request — it only
   spawns the local server process over stdio.
+
+## Contributing
+
+The most useful contribution to a detection ruleset is a **false positive** —
+a rule that fires on correctly authorized code. A gate wider than the defect
+it targets gets switched off, and a switched-off rule protects nothing, so
+those are treated as real defects here. Misses are just as welcome; the rules
+catch 4 of the 6 scenarios against this lab's own source and
+[`detection/README.md`](detection/README.md) says why.
+
+There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has
+the fixture convention, the exact-count CI gate, and the multi-language rule
+trap that costs an afternoon if you meet it the hard way.
+
+Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
+Security reports go through [`SECURITY.md`](SECURITY.md) — and please do not
+report the planted flaws; they are the point.
+
+## Citing this
+
+[`CITATION.cff`](CITATION.cff), or use GitHub's **Cite this repository** button.
 
 ## License
 
