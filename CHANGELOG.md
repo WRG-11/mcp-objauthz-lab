@@ -4,6 +4,42 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Finished the S7 rollout across every surface, and gated it.** 3.3.0 shipped
+  the scenario with the source, PoC, rules and main README updated — and left
+  `challenges/`, `SECURITY.md`, `CONTRIBUTING.md`, `CITATION.cff` and `.github/`
+  behind. The pre-ship check was scoped to the files that happened to be edited,
+  which is exactly how a surface gets missed.
+
+  One miss was **functional, not cosmetic**: each challenge's Setup command pins
+  the *other* scenarios to `fixed` so its own mission has one answer. All six
+  still pinned six toggles instead of seven, leaving S7 live — so S1's "find the
+  one tool that lets you cross tenants" had two answers, and so did the rest.
+
+  Also corrected: the README env-var table and all three all-fixed commands now
+  carry `LAB_S7`; `challenges/README.md` has the S7 row and counts seven;
+  `SECURITY.md`/`CONTRIBUTING.md`/`CITATION.cff` count seven planted flaws; the
+  issue template's coverage number is 5-of-7 and its config link no longer points
+  at a heading that does not exist; and `detection/README.md` lists all seven
+  rules — the `-py-ternary` rule had been missing from that table since the
+  previous release.
+
+### Added
+
+- **`test/docs-consistency.test.js`** — the durable fix. It derives the scenario
+  list from the `LAB_S*` toggles the server actually reads, the tool count from
+  the `registerTool` calls, and the rule ids from the ruleset, then checks the
+  docs against them. Counting by hand is what failed, so nothing in it is counted
+  by hand. Mutation-checked against the real defects: removing `LAB_S7` from a
+  challenge Setup fails with *"that scenario stays vulnerable and this challenge
+  has more than one answer"*; dropping the S7 table row or a toggle from an
+  all-fixed command each fail too. Add an S8 and it names every file left behind.
+
+  Suite is now 51 tests (was 42).
+
 ## [3.3.0] - 2026-08-22
 
 ### Added

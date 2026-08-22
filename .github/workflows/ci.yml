@@ -3,7 +3,7 @@ name: lab-integrity
 # This lab is vulnerable BY DESIGN. CI does NOT assert "the code is secure" —
 # it asserts the teaching artifact still works: deps install, every module
 # parses, the pure auth.js/store.js functions behave correctly in isolation
-# (unit tests), and the two-way gate holds across all six scenarios plus the
+# (unit tests), and the two-way gate holds across all seven scenarios plus the
 # all-fixed hardened build. Two-way means both halves: in each vuln build the
 # exploit reproduces (and a correctly-scoped sibling still denies, proving an
 # outlier rather than a globally broken server), and in each fixed build it is

@@ -8,8 +8,8 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 5
-[Semgrep](https://semgrep.dev) rules, one per shape from the six lab
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 7
+[Semgrep](https://semgrep.dev) rules covering the shapes from the seven lab
 scenarios (S2 and S6 share a rule — same code shape, different tool):
 
 | Rule id | Scenario(s) | Pattern |
@@ -19,6 +19,8 @@ scenarios (S2 and S6 share a rule — same code shape, different tool):
 | `mcp-wildcard-sentinel-scope-bypass` | S4 | a `"*"`/`"all"` sentinel value bypasses scope filtering with no role check nearby |
 | `mcp-batch-resolve-missing-per-item-scope-filter` | S3 | a batch of client-supplied ids is resolved with no `.filter(...)` back to the caller's own scope |
 | `mcp-admin-named-tool-missing-role-check` | S5 | a tool named `*admin*` never calls a role-check function in its handler |
+| `mcp-client-supplied-scope-overrides-session-py-ternary` | S2, S6 (Python) | Python's `x if x else y` spelling of the same override — a separate rule because a multi-language rule needs every pattern valid in *every* declared language |
+| `mcp-unscoped-query-object-fetch` | S7 | a repository fetch (`findOneBy` / `findOne({ where })` / `delete`) whose filter carries an `id` but **no** tenant key. **WARNING, not ERROR** — a single call can't prove the entity is tenant-scoped, so it flags the shape for review |
 
 ## Run it
 
