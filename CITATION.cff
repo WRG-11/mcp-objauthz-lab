@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: >-
+  If you use this lab or its detection rules in research or teaching, please
+  cite it as below.
+title: >-
+  mcp-objauthz-lab: a vulnerable-by-design MCP server and Semgrep ruleset for
+  object-level authorization flaws
+abstract: >-
+  A self-hostable synthetic Model Context Protocol server carrying six planted
+  object-level authorization flaws (BOLA/IDOR, CWE-639 and CWE-862), one per
+  challenge, together with a Semgrep ruleset that detects the same code shapes
+  in real MCP server source. Three of the rules cover Python as well as
+  JavaScript and TypeScript. The ruleset is distributed as a GitHub Action and
+  uploads SARIF findings to a repository's security tab.
+type: software
+authors:
+  - alias: WRG-11
+    website: "https://github.com/WRG-11"
+repository-code: "https://github.com/WRG-11/mcp-objauthz-lab"
+url: "https://github.com/WRG-11/mcp-objauthz-lab"
+license: MIT
+version: 3.2.0
+keywords:
+  - model-context-protocol
+  - mcp
+  - authorization
+  - broken-object-level-authorization
+  - bola
+  - idor
+  - cwe-639
+  - cwe-862
+  - static-analysis
+  - semgrep
+  - security-education
+  - vulnerable-by-design

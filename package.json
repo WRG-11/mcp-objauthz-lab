@@ -1,6 +1,6 @@
 {
   "name": "mcp-objauthz-lab",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "private": true,
   "description": "A self-hostable, synthetic vulnerable MCP server that teaches object-level / cross-tenant authorization bugs (BOLA / IDOR, CWE-639 / CWE-862) — the 'inconsistent-authorization single-outlier' class.",
   "type": "module",
@@ -30,5 +30,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
     "zod": "4.4.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WRG-11/mcp-objauthz-lab.git"
+  },
+  "homepage": "https://github.com/WRG-11/mcp-objauthz-lab#readme",
+  "bugs": {
+    "url": "https://github.com/WRG-11/mcp-objauthz-lab/issues"
   }
 }

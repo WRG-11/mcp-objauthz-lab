@@ -51,7 +51,7 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **5/5 rules fire
+minimal vulnerable snippet and one fixed snippet per rule. **6/6 rules fire
 on the vulnerable snippet and stay silent on the fixed one.** This is the
 correctness bar every rule was iterated against.
 
