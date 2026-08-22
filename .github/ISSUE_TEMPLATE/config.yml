@@ -1,9 +1,9 @@
 blank_issues_enabled: true
 contact_links:
   - name: The planted flaws are intentional
-    url: https://github.com/WRG-11/mcp-objauthz-lab#the-six-scenarios
+    url: https://github.com/WRG-11/mcp-objauthz-lab#try-the-challenges
     about: >-
-      src/ is vulnerable by design — six planted bugs, one per challenge.
+      src/ is vulnerable by design — seven planted bugs, one per challenge.
       Please do not file those as issues; the README documents each one.
   - name: Report an unintended security problem privately
     url: https://github.com/WRG-11/mcp-objauthz-lab/security/advisories/new
