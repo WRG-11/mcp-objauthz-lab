@@ -8,19 +8,20 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 7
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 8
 [Semgrep](https://semgrep.dev) rules covering the shapes from the seven lab
 scenarios (S2 and S6 share a rule — same code shape, different tool):
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
 | `mcp-missing-object-authz-check` | S1 | object resolved by client id, mutated/returned with no `require*Access`/`check*Access`/`assert*Owner` call in between |
-| `mcp-client-supplied-scope-overrides-session` | S2, S6 | `org_id`/`tenant_id`/`project_id`/`user_id`/`owner_id` argument used as a fallback/override for the session's own scope |
+| `mcp-client-supplied-scope-overrides-session` | S2 | `org_id`/`tenant_id`/`project_id`/`user_id`/`owner_id` argument used as a fallback/override for the session's own scope |
 | `mcp-wildcard-sentinel-scope-bypass` | S4 | a `"*"`/`"all"` sentinel value bypasses scope filtering with no role check nearby |
 | `mcp-batch-resolve-missing-per-item-scope-filter` | S3 | a batch of client-supplied ids is resolved with no `.filter(...)` back to the caller's own scope |
 | `mcp-admin-named-tool-missing-role-check` | S5 | a tool named `*admin*` never calls a role-check function in its handler |
-| `mcp-client-supplied-scope-overrides-session-py-ternary` | S2, S6 (Python) | Python's `x if x else y` spelling of the same override — a separate rule because a multi-language rule needs every pattern valid in *every* declared language |
+| `mcp-client-supplied-scope-overrides-session-py-ternary` | S2 (Python) | Python's `x if x else y` spelling of the same override — a separate rule because a multi-language rule needs every pattern valid in *every* declared language |
 | `mcp-unscoped-query-object-fetch` | S7 | a repository fetch (`findOneBy` / `findOne({ where })` / `delete`) whose filter carries an `id` but **no** tenant key. **WARNING, not ERROR** — a single call can't prove the entity is tenant-scoped, so it flags the shape for review |
+| `mcp-write-parent-from-client-argument` | S6 | a `create`/`save` call whose parent or tenant key comes from a caller-supplied argument instead of the session, with no membership check on it. **WARNING, not ERROR** — bound straight from an argument this is a true positive, bound through a local the variable's origin decides and one call site cannot show it |
 
 ## Run it
 
