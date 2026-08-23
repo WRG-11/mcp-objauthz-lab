@@ -58,7 +58,7 @@ Requirements: **Node.js ≥ 20**.
 
 ```bash
 npm install
-npm test    # 39 unit tests — auth.js/store.js in isolation
+npm test    # 51 unit tests — auth.js/store.js in isolation
 npm run poc # 19-row two-way gate — the tools wired end-to-end over MCP
 ```
 
@@ -354,15 +354,24 @@ exactly why the S1-style "look for the missing guard" reflex walks past it.
 
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 8 [Semgrep](https://semgrep.dev)
-rules — one per code shape above — that flag these patterns in **your own**
-MCP server source, not just this lab's. Three of them run against **Python as
-well as JavaScript/TypeScript**, which matters because the reference MCP SDKs
-ship in both. Honestly documented: they catch 5 of 7 scenarios when run
-against this lab's own runtime-toggle source (a real, disclosed limitation,
-not a lab artifact — see the linked README for why), and they produce **zero
-findings** against the official `@modelcontextprotocol/sdk` — 168 files of
-real third-party code, measured.
+[`detection/`](detection/README.md) ships 12 [Semgrep](https://semgrep.dev)
+rules — one per code shape above, with Python siblings where the JavaScript
+spelling cannot parse as Python — that flag these patterns in **your own**
+MCP server source, not just this lab's. **Eight of the twelve run against
+Python as well as JavaScript/TypeScript**, which matters because the
+reference MCP SDKs ship in both.
+
+Honestly documented, and re-measured in this release: the earlier claim that
+the rules "catch 5 of 7 scenarios" against this lab's own source implied the
+S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
+no toggle, guard simply absent — both fire exactly as designed; the only code
+they go quiet on is a handler where the guard is *written but gated behind a
+runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
+the measured decision and the fixtures pinning it). Against the official
+`@modelcontextprotocol/sdk` the ruleset produces **zero findings** — 344
+files of real third-party code, measured with a planted canary proving the
+scan actually reached the tree (semgrep silently skips `node_modules`, so an
+unverified `0` is not a result).
 
 One of those five is worth spelling out, because it was wrong until 3.4.0. S6
 appeared covered: scans reported a finding inside `note_create_in_org`. What

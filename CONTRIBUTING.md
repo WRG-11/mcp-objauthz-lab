@@ -68,9 +68,14 @@ whole rule invalid — and the scan still exits 0 while silently reporting
 nothing. If a language needs its own syntax, give it its own rule (see
 `mcp-client-supplied-scope-overrides-session-py-ternary` for the shape).
 
-Two of the rules are JavaScript-only on purpose: their exclusions are written
-against `server.registerTool(...)` plus an arrow function, which cannot match
-Python. Declaring `python` on them would add patterns that can never fire.
+Every JavaScript/TypeScript shape also has Python coverage: either the rule
+declares `python` directly (three do), or it has a `-py` sibling rule
+carrying the Python spelling of the same defect (`=>` arrows, object
+literals and `registerTool` callbacks cannot parse as Python, and Python's
+equivalents cannot parse as JavaScript — merging would invalidate the whole
+rule). When adding a pattern to a multi-language rule, remember that every
+pattern must parse in **every** declared language, and that a pattern which
+fails to parse silences the entire rule while scans still exit 0.
 
 ### Before opening the PR
 

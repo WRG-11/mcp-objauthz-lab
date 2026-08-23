@@ -8,9 +8,12 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 8
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 12
 [Semgrep](https://semgrep.dev) rules covering the shapes from the seven lab
-scenarios (S2 and S6 share a rule — same code shape, different tool):
+scenarios. Eight of the twelve run against **Python as well as
+JavaScript/TypeScript**: three shared rules declare both, and five `-py`
+siblings carry the shapes whose JavaScript spelling cannot parse as Python
+(`=>` arrows, object literals, `registerTool` callbacks):
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
@@ -22,6 +25,10 @@ scenarios (S2 and S6 share a rule — same code shape, different tool):
 | `mcp-client-supplied-scope-overrides-session-py-ternary` | S2 (Python) | Python's `x if x else y` spelling of the same override — a separate rule because a multi-language rule needs every pattern valid in *every* declared language |
 | `mcp-unscoped-query-object-fetch` | S7 | a repository fetch (`findOneBy` / `findOne({ where })` / `delete`) whose filter carries an `id` but **no** tenant key. **WARNING, not ERROR** — a single call can't prove the entity is tenant-scoped, so it flags the shape for review |
 | `mcp-write-parent-from-client-argument` | S6 | a `create`/`save` call whose parent or tenant key comes from a caller-supplied argument instead of the session, with no membership check on it. **WARNING, not ERROR** — bound straight from an argument this is a true positive, bound through a local the variable's origin decides and one call site cannot show it |
+| `mcp-batch-resolve-missing-per-item-scope-filter-py` | S3 (Python) | the same list→get asymmetry in list-comprehension spelling (`[store.get_note(i) for i in ids]`) |
+| `mcp-admin-named-tool-missing-role-check-py` | S5 (Python) | an `@mcp.tool()`-decorated function named `*admin*` whose body never calls a role check |
+| `mcp-unscoped-query-object-fetch-py` | S7 (Python) | SQLAlchemy spellings of the unscoped fetch: `filter_by(id=...)` with no tenant kwarg, and a primary-key `session.get(Model, pk)`. **WARNING**, same honesty as its JS sibling |
+| `mcp-write-parent-from-client-argument-py` | S6 (Python) | the kwargs spelling of the foreign-parent create/save. **WARNING**, same honesty as its JS sibling |
 
 ## Run it
 
@@ -54,7 +61,7 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **7/7 rules fire
+minimal vulnerable snippet and one fixed snippet per rule. **12/12 rules fire
 on the vulnerable snippet and stay silent on the fixed one.** This is the
 correctness bar every rule was iterated against.
 
@@ -64,17 +71,36 @@ are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 ruleset against it: **5 of 7 scenarios flagged (S2, S3, S4, S6, S7). S1 and S5
 are missed.**
 
-Why S1/S5 are missed: both rules work by checking that no authorization
-call *textually appears* between the object lookup and the sink. In
-`tools.js` the `requireOrgAccess()` / `requireAdminRole()` call **does**
-appear in the function body — it's just gated behind an `if
-(modes.sN === "fixed")` runtime condition the static rule can't evaluate.
-A purely static, non-dataflow tool cannot distinguish "the check always
-runs" from "the check runs only if a flag says so" without control-flow
-analysis. **This is a real limitation, not just a lab artifact** — any
-codebase with a feature-flagged or config-gated authorization check has the
-same blind spot for this rule shape. Treat a clean scan as "no *obvious*
-missing-check pattern found," not "no S1/S5-class bug exists."
+Why S1/S5 are missed *there* — and why that says nothing about the rules on
+real code. Both rules work by checking that no authorization call *textually
+appears* between the object lookup and the sink. In `tools.js` the
+`requireOrgAccess()` / `requireAdminRole()` call **does** appear in the
+function body — it's just gated behind an `if (modes.sN === "fixed")`
+runtime condition the static rule cannot evaluate. Measured 2026-08-23 on
+production-shaped probe files with the toggle stripped out and the guard
+simply absent: both rules fire exactly as they should (`deleteNoteVuln` →
+finding; the guarded sibling → silent). The earlier published framing that
+this was "a real limitation, not a lab artifact" was wrong in the direction
+that matters: it implied the rules miss real-world S1/S5 bugs. They do not —
+they only go quiet where a guard is *written but conditional*, which is this
+lab's own scaffolding shape.
+
+The decision, taken deliberately: **the rules do not see through toggles.**
+Treating a conditionally-present guard as absent would flag code like
+
+```javascript
+if (config.strictAuthz) requireAccess(session, obj);   // legitimate
+await store.deleteObject(obj.id);
+```
+
+which is a real production pattern and textually indistinguishable from the
+lab's toggle at this rule's matching depth — measured, not guessed. A gate
+that wide produces the false positives that get a rule switched off, and
+narrowing it to this lab's literal `"fixed"` spelling would tune the detector
+to its own lab. [`toggle-blindness.js`](semgrep/fixtures/toggle-blindness.js)
+pins all of this as fixtures: for S1 and S5 each, a toggle-free vulnerable
+handler (fires), the lab's toggle-guarded spelling (silent, on purpose), and
+an unconditionally-guarded handler (silent).
 
 S2/S3/S4/S6 don't have this problem because their bug is about an
 *unconditional* fallback/sentinel/missing-filter shape, not a conditionally-
@@ -115,10 +141,12 @@ beyond the one-line fix:
   If you adapt these rules, start by auditing that regex against your own
   parameter vocabulary rather than trusting the defaults.
 
-CVE-2026-9135 is Python; these rules are JavaScript/TypeScript, so they could
-not have scanned Langflow itself. The CVE is cited as evidence that the *shape*
-occurs in production MCP tooling, not as something this ruleset would have
-found in place.
+CVE-2026-9135 is Python. When this rule missed `user_id` the ruleset could not
+have scanned Langflow's source at all; since 3.2.0 the S2 rules — including
+this one — declare Python, so a current scan of Langflow-shaped code reaches
+the same spelling (`user_id or session.user_id`) that fires in JavaScript.
+The CVE is cited as evidence that the *shape* occurs in production MCP
+tooling, not as a claim about any past scan.
 
 ## Why this exists (vs. just using the hands-on lab)
 
