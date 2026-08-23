@@ -4,6 +4,44 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] — 2026-08-23
+
+### Added
+
+- Detection rule `mcp-write-parent-from-client-argument` (S6) — a `create`/`save`
+  whose parent or tenant key comes from a caller-supplied argument instead of the
+  session, with no membership check on it. Every other rule in the set guards a
+  read; this one guards a write, and the asymmetry is the point: a caller who
+  cannot read another tenant's data may still be able to create data inside it.
+  WARNING rather than ERROR, for the same reason S7's rule is: bound straight
+  from an argument it is a true positive, bound through a local the variable's
+  origin decides and one call site cannot show it.
+- Fixture `write-parent-from-client-argument.js` — four vulnerable spellings
+  (bare argument, argument via a local, `args.workspaceId`, ORM `save` binding
+  `tenantId`) and three correct ones, including a cross-team tool that accepts a
+  destination and verifies membership first. Flagging that last one would be the
+  false positive that gets the rule switched off.
+
+### Fixed
+
+- `detection/README.md` claimed `mcp-client-supplied-scope-overrides-session`
+  covered S6. Measured, it does not. It fires inside `note_create_in_org`, which
+  is why the scenario looked covered — but what it matches is this lab's own
+  `modes.s6 === "vuln" && org_id ? org_id : session.orgId` toggle, a line no
+  production server writes. Run against four real-world spellings of S6 the
+  full seven-rule set returned **zero findings**. The claim is corrected and the
+  scenario now has a rule that measures its actual shape.
+
+### Changed
+
+- Fixture finding count 17 → 21 (15 JavaScript + 6 Python); rule count 7 → 8.
+
+Verified before release: 51 unit tests, PoC two-way gate 19/21 rows unchanged at
+19/19, fixture annotations 4 of 4 `ruleid:` firing and 0 of 3 `ok:` firing, and
+zero findings across the 336 JavaScript/TypeScript files of the official
+`@modelcontextprotocol/sdk` — with a planted canary proving the scan reached
+that tree rather than silently skipping it.
+
 ## [Unreleased]
 
 ### Fixed

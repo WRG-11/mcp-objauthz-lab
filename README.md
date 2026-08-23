@@ -354,7 +354,7 @@ exactly why the S1-style "look for the missing guard" reflex walks past it.
 
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 7 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 8 [Semgrep](https://semgrep.dev)
 rules — one per code shape above — that flag these patterns in **your own**
 MCP server source, not just this lab's. Three of them run against **Python as
 well as JavaScript/TypeScript**, which matters because the reference MCP SDKs
@@ -363,6 +363,13 @@ against this lab's own runtime-toggle source (a real, disclosed limitation,
 not a lab artifact — see the linked README for why), and they produce **zero
 findings** against the official `@modelcontextprotocol/sdk` — 168 files of
 real third-party code, measured.
+
+One of those five is worth spelling out, because it was wrong until 3.4.0. S6
+appeared covered: scans reported a finding inside `note_create_in_org`. What
+matched was this lab's own `modes.s6 === "vuln" ? … : …` toggle, a line no
+production server writes. Against four real spellings of the same bug the
+whole ruleset returned nothing. `mcp-write-parent-from-client-argument` catches
+the shape itself, and the fixture keeps proxy and target apart on purpose.
 
 Drop it into your own MCP server's CI as a GitHub Action. Findings upload to
 your repo's Security tab, so the calling workflow needs

@@ -328,3 +328,68 @@ rules:
       references:
         - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
 
+  # ── S6: the write side ────────────────────────────────────────────────────
+  # Every rule above guards a READ. This one guards a WRITE, and the asymmetry
+  # is the point: a caller who cannot read another tenant's data may still be
+  # able to CREATE data inside it, because the destination is taken from an
+  # argument instead of the session.
+  #
+  # Why this rule exists at all. The lab's own S6 already showed up in scans,
+  # so the scenario looked covered. It was not. What matched was the lab's
+  # vuln/fixed toggle -- `modes.s6 === "vuln" && org_id ? org_id :
+  # session.orgId` -- which the S2 ternary pattern happens to fit and which no
+  # production server would ever write. Measured 2026-08-23 against four
+  # real-world spellings of the same bug (bare argument, argument via a local,
+  # args.workspaceId, ORM save binding tenantId): the full seven-rule set
+  # returned ZERO. The visible coverage was scaffolding.
+  #
+  # Severity is WARNING, not ERROR, and deliberately so. When the parent key is
+  # bound straight from an argument this is a true positive; when it is bound
+  # from a local variable, that variable's origin decides, and one call site
+  # cannot show it. The rule flags the shape for a reader rather than asserting
+  # the bug -- the same honesty S7's rule carries.
+  #
+  # JavaScript/TypeScript only. The object-literal pattern below does not parse
+  # as Python, and a rule that fails to parse in one declared language
+  # invalidates the whole rule while the scan still exits 0.
+  - id: mcp-write-parent-from-client-argument
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      A create/save call takes its parent or tenant key from a caller-supplied
+      argument rather than the authenticated session. A caller can then plant
+      an object inside a tenant they do not belong to (foreign-parent
+      injection) even when every read path is correctly scoped. Bind the parent
+      to the session's own scope, or verify membership of the supplied value
+      before writing. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+    patterns:
+      - pattern: "$STORE.$METHOD({ ..., $KEY: $VAL, ... })"
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i)^(create|insert|add|save|put|write|new)([A-Z_].*)?$
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+      # session-derived destinations are the correct shape and stay silent
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+      # a membership check on the supplied value makes the argument legitimate;
+      # the guard list lives here rather than in prose so a new guard name is a
+      # data edit, not a code change
+      - pattern-not-inside:
+          patterns:
+            - pattern: |
+                $CHECK(...);
+                ...
+                $STORE.$METHOD({ ..., $KEY: $VAL, ... })
+            - metavariable-regex:
+                metavariable: $CHECK
+                regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)[A-Z_].*$
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
