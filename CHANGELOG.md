@@ -4,6 +4,77 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] — 2026-08-23
+
+### Added
+
+- Four `-py` sibling rules, closing the last JavaScript/TypeScript-only shapes.
+  The reference MCP SDKs ship in both languages; eight of the twelve rules now
+  cover Python:
+  - `mcp-batch-resolve-missing-per-item-scope-filter-py` (S3) — the batch
+    resolve as a list comprehension (`[store.get_note(i) for i in ids]`);
+    `.map` with an arrow has no Python spelling.
+  - `mcp-admin-named-tool-missing-role-check-py` (S5) — FastMCP registers
+    tools as decorated functions, so this sibling keys on the function name
+    carrying `admin` and the body lacking a role check.
+  - `mcp-unscoped-query-object-fetch-py` (S7) — `filter_by(id=...)` with no
+    tenant kwarg and primary-key `session.get(Model, pk)`. A Model-name
+    constraint keeps `config.get("timeout", 30)`-style `dict.get` calls
+    silent (measured). WARNING like its JS sibling.
+  - `mcp-write-parent-from-client-argument-py` (S6) — the kwargs spelling of
+    the foreign-parent create/save. As predicted, the JS rule's core object-
+    literal pattern cannot parse as Python, so it ported as a sibling rather
+    than a merged rule.
+
+### Fixed
+
+- **`mcp-missing-object-authz-check`'s read branch had never fired on
+  anything.** `patterns` is an AND: the `$MUTMETHOD` regex sat at top level,
+  so when `pattern-either` took the read branch (`resolve -> get ->
+  return ok(obj)`) the metavariable was never bound and the match died.
+  Measured before the fix: every pure-read spelling of a cross-tenant fetch
+  returned **zero** findings while the mutation was caught. The branches are
+  now scoped blocks carrying only their own constraints, the read branch is
+  anchored at the session-resolution line (required for its exclusions to
+  engage — see below), and fixture pairs pin both halves: the caught read
+  and the guarded read, in JavaScript and Python.
+- **False positive on the official SDK, found by widening the measurement.**
+  Scanning the full shipped `@modelcontextprotocol/sdk` tree (344 files,
+  `dist/` included — earlier releases had measured a narrower subset) surfaced
+  two findings from `mcp-batch-resolve-missing-per-item-scope-filter`, both
+  the same shape: `relatedIds.map(id => this._requestResponseMap.get(id))` —
+  an in-memory response-map lookup, not a storage resolve. Receivers ending
+  in a container-ish suffix (map/cache/memo/index) are now excluded from both
+  batch rules; everything else, including `this.store`-shaped receivers,
+  still matches. Re-measured after the fix: zero findings, with a planted
+  three-violation canary inside the copied tree firing 3/3 — proving the scan
+  reached the code rather than silently skipping it (`node_modules` is
+  skipped even under `--no-git-ignore`; an unverified `0` is not a result).
+- **The README claim that the S1/S5 "miss" was "a real limitation, not a lab
+  artifact" was wrong.** Measured on production-shaped files with the toggle
+  stripped out: both rules fire exactly as designed. They go quiet only where
+  a guard is written but gated behind a runtime toggle — this lab's own
+  scaffolding shape. Decision, taken deliberately and pinned by new fixtures
+  (`toggle-blindness.js`): the rules do NOT see through toggles. Treating a
+  conditionally-present guard as absent would flag
+  `if (config.strictAuthz) requireAccess(...)` — a legitimate production
+  pattern, textually indistinguishable from the lab's toggle at this matching
+  depth. A gate that wide produces the false positives that get a rule
+  switched off.
+
+### Changed
+
+- Rule count 8 → 12; Python-carrying rules 3 → 8. Fixture finding count
+  21 → 33 (20 JavaScript + 13 Python), including two deliberate second
+  signals: unguarded admin handlers are flagged both for the missing role
+  check and, via the now-live read path, for the missing object check —
+  two true findings about one handler.
+
+Verified before release: 51 unit tests, PoC two-way gate 19/19 rows, all four
+acceptance gates green, and zero findings across the official
+`@modelcontextprotocol/sdk` — with a planted canary proving the scan reached
+that tree rather than silently skipping it.
+
 ## [3.4.0] — 2026-08-23
 
 ### Added

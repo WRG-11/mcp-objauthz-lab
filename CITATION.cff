@@ -9,7 +9,7 @@ abstract: >-
   A self-hostable synthetic Model Context Protocol server carrying seven planted
   object-level authorization flaws (BOLA/IDOR, CWE-639 and CWE-862), one per
   challenge, together with a Semgrep ruleset that detects the same code shapes
-  in real MCP server source. Three of the rules cover Python as well as
+  in real MCP server source. Eight of its twelve rules cover Python as well as
   JavaScript and TypeScript. The ruleset is distributed as a GitHub Action and
   uploads SARIF findings to a repository's security tab.
 type: software
@@ -19,7 +19,7 @@ authors:
 repository-code: "https://github.com/WRG-11/mcp-objauthz-lab"
 url: "https://github.com/WRG-11/mcp-objauthz-lab"
 license: MIT
-version: 3.4.0
+version: 3.5.0
 keywords:
   - model-context-protocol
   - mcp

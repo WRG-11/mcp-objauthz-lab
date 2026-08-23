@@ -8,22 +8,52 @@ rules:
       between. This is the MCP object-level authorization pattern
       (BOLA/IDOR, CWE-639/862) — see
       https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original
+    #
+    # The read branch below existed on paper for the rule's whole life and had
+    # never fired on anything. `patterns` is an AND, and the $MUTMETHOD regex
+    # sat at the top level where it applies to BOTH branches: when
+    # pattern-either took the read branch, $MUTMETHOD was never bound, an
+    # unbound metavariable fails its own constraint, and the match died.
+    # Measured 2026-08-23: `resolve -> get -> return ok(obj)` returned ZERO
+    # findings in every spelling tried -- a pure cross-tenant READ went
+    # unseen even though it is the same defect as the mutation. The branches
+    # are now scoped blocks that each carry only their own constraints, with
+    # fixture pairs pinning both halves: the caught read and the guarded read.
+    #
+    # Deliberately still `return ok(...)`, not bare `return $OBJ`: a response-
+    # wrapped object is the tool-handler shape this ruleset targets; matching
+    # every bare return would flag ordinary getters and get the rule disabled.
     patterns:
       - pattern-either:
-          - pattern: |
-              $OBJ = $STORE.$GETMETHOD($ID);
-              ...
-              $STORE.$MUTMETHOD($OBJ.$FIELD);
-          - pattern: |
-              $OBJ = $STORE.$GETMETHOD($ID);
-              ...
-              return ok($OBJ);
+          - patterns:
+              - pattern: |
+                  $OBJ = $STORE.$GETMETHOD($ID);
+                  ...
+                  $STORE.$MUTMETHOD($OBJ.$FIELD);
+              - metavariable-regex:
+                  metavariable: $MUTMETHOD
+                  regex: "(?i)^(delete|update).*"
+          - patterns:
+              # Anchored at the session-resolution line on purpose. A bare
+              # `get -> return ok(obj)` span cannot see a role check that
+              # sits BEFORE the fetch (pattern-not only matches inside the
+              # positive span -- measured), so the span starts where real
+              # tool handlers start. $RESOLVE is deliberately unconstrained:
+              # naming the resolver would be a guess about the next
+              # codebase's vocabulary, the exact failure mode
+              # CVE-2026-9135 taught this ruleset. Cost, stated honestly: a
+              # pure helper that fetches and returns with no session call
+              # before it is not matched by THIS branch (the mutation branch
+              # still is).
+              - pattern: |
+                  $SESSION = $RESOLVE(...);
+                  ...
+                  $OBJ = $STORE.$GETMETHOD($ID);
+                  ...
+                  return ok($OBJ);
       - metavariable-regex:
           metavariable: $GETMETHOD
           regex: "(?i)^(get|find).*"
-      - metavariable-regex:
-          metavariable: $MUTMETHOD
-          regex: "(?i)^(delete|update).*"
       - pattern-not: |
           $OBJ = $STORE.$GETMETHOD($ID);
           ...
@@ -83,6 +113,109 @@ rules:
           $OBJ = $STORE.$GETMETHOD($ID);
           ...
           assert_owner(...);
+          ...
+      # The read branch below is anchored at the session-resolution line, and
+      # its exclusions must be anchored there too -- measured, a negative whose
+      # first statement differs from the positive match's first statement
+      # never engages (this is what makes the assignment-anchored ownership
+      # list above work against the mutation branch yet not against the read
+      # branch), and a $GUARD metavariable constrained by metavariable-regex
+      # inside pattern-not silently never matches either (also measured -- so
+      # this list is enumerated, one name per block, same policy as S6's rule:
+      # a new guard name is a data edit here, not prose). Role checks are on
+      # the list because an admin cross-org lookup authorizes by ROLE, not
+      # ownership -- demanding an ownership call there would flag every
+      # correctly-built admin tool once the read branch went live (measured:
+      # it did exactly that).
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          requireOrgAccess(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          require_org_access(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          requireOwnership(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          require_ownership(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          requireAccess(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          require_access(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          checkAccess(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          check_access(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          checkOwnership(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          check_ownership(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          assertOwner(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          assert_owner(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          requireAdminRole(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          require_admin_role(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          checkAdminRole(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          check_admin_role(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          assertAdminRole(...);
+          ...
+      - pattern-not: |
+          $SESSION = $RESOLVE(...);
+          ...
+          assert_admin_role(...);
           ...
     metadata:
       cwe: ["CWE-639", "CWE-862"]
@@ -187,6 +320,16 @@ rules:
       - metavariable-regex:
           metavariable: $METHOD
           regex: "(?i)^(get|find).*"
+      # Measured against the official @modelcontextprotocol/sdk (344 files,
+      # dist included): one finding, `relatedIds.map(id =>
+      # this._requestResponseMap.get(id))` -- an in-memory response-map
+      # lookup, not a storage resolve. Receivers that end in a container-ish
+      # suffix are excluded; everything else, including `this.store`-shaped
+      # receivers, still matches. Same policy as the wildcard rule's filter:
+      # a narrow, measured exclusion beats a known false positive.
+      - metavariable-regex:
+          metavariable: $STORE
+          regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
       - pattern-not-inside: |
           $RESOLVED = $IDS.map($F => $STORE.$METHOD($F));
           ...
@@ -387,6 +530,198 @@ rules:
             - metavariable-regex:
                 metavariable: $CHECK
                 regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)[A-Z_].*$
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+
+  # ── Python ports ────────────────────────────────────────────────────────────
+  # Four shapes were previously JavaScript/TypeScript-only. Each ships as its
+  # own `-py` sibling instead of extra patterns on the shared rule, for the
+  # same reason as -py-ternary above: a multi-language rule requires every
+  # pattern to parse in every declared language. The JS spellings (`=>`
+  # arrows, object literals, registerTool callback shape) do not parse as
+  # Python and the Python equivalents do not parse as JavaScript -- merging
+  # would invalidate the whole rule while scans still exit 0.
+  #
+  # The reference MCP SDKs ship in both languages, which is where these rules
+  # earn their keep.
+
+  # S3 in Python. The JS rule matches `ids.map(id => store.getNote(id))`;
+  # `.map` with an arrow has no Python spelling. The list comprehension is
+  # the idiomatic batch resolve. The exclusion covers the comprehension
+  # filter; re-filtering inside a for loop is NOT covered -- flagged here so
+  # nobody assumes more than was measured.
+  - id: mcp-batch-resolve-missing-per-item-scope-filter-py
+    languages: [python]
+    severity: WARNING
+    message: >
+      Multiple objects are resolved by client-supplied ids in a batch
+      comprehension, but the surrounding code applies no per-item scope
+      filter back to the caller's own scope (the list->get asymmetry,
+      CWE-862). Filter resolved items by the session's scope before
+      returning them. See
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
+    patterns:
+      - pattern: "$RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]"
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: "(?i)^(get|find).*"
+      # Same measured exclusion as the JavaScript sibling: an in-memory dict
+      # lookup (`response_map.get(id)`) is not a storage resolve.
+      - metavariable-regex:
+          metavariable: $STORE
+          regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+      - pattern-not-inside: |
+          $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+          ...
+          [$N for $N in $RESOLVED if ...]
+    metadata:
+      cwe: ["CWE-862"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  # S5 in Python. The JS rule is written against server.registerTool(...) plus
+  # an arrow-function handler, which cannot match Python. FastMCP registers
+  # tools with decorators over plain/async functions, so this sibling keys on
+  # the function NAME carrying admin and the handler body lacking a role
+  # check. Naming is documentation, not enforcement -- same defect, different
+  # registration syntax.
+  - id: mcp-admin-named-tool-missing-role-check-py
+    languages: [python]
+    severity: ERROR
+    message: >
+      A tool registered on an admin-sounding function never calls a role-check
+      function in its body. Naming it "admin_*" / "*_admin_*" documents intent
+      without enforcing it -- any valid token reaches the handler unless the
+      code verifies the caller's role. CWE-863 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @$DEC
+              def $FUNC(...):
+                  ...
+          - pattern: |
+              @$DEC
+              async def $FUNC(...):
+                  ...
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: (?i).*admin.*
+      - pattern-not-inside: |
+          @$DEC
+          def $FUNC(...):
+              ...
+              require_admin_role(...)
+              ...
+      - pattern-not-inside: |
+          @$DEC
+          def $FUNC(...):
+              ...
+              check_admin_role(...)
+              ...
+      - pattern-not-inside: |
+          @$DEC
+          def $FUNC(...):
+              ...
+              assert_admin_role(...)
+              ...
+      - pattern-not-inside: |
+          @$DEC
+          def $FUNC(...):
+              ...
+              requireAdminRole(...)
+              ...
+    metadata:
+      cwe: ["CWE-863"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  # S7 in Python. The JS object-literal filter `{ id }` does not parse as
+  # Python; SQLAlchemy spells the same omission in kwargs. Two shapes
+  # measured: filter_by(id=...) omits the tenant key from the WHERE, and
+  # session.get(Model, pk) fetches straight by primary key with no tenant
+  # column involved at all. The Model argument must start uppercase --
+  # dict.get spellings like config.get("timeout", 30) are everywhere in real
+  # Python and are not authorization decisions; that one constraint keeps
+  # them silent (measured). WARNING for the same honesty as the JS sibling:
+  # a genuinely globally-owned table fetched by id is a true negative.
+  - id: mcp-unscoped-query-object-fetch-py
+    languages: [python]
+    severity: WARNING
+    message: >
+      An object is fetched through a query that carries an id but no tenant
+      key (workspace_id / org_id / tenant_id / project_id ...), or fetched
+      straight by primary key. If the entity is multi-tenant, any caller's id
+      resolves regardless of tenant -- the query-scoped form of BOLA/IDOR,
+      CWE-639. Bind the tenant key into the same filter, sourced from the
+      session. There is no guard call to be missing here -- the authorization
+      IS the tenant key inside the filter. Confirm the entity is genuinely
+      tenant-scoped before treating this as a bug. See
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+    patterns:
+      - pattern-either:
+          - pattern: "$Q.filter_by(id=$ID)"
+          - patterns:
+              - pattern: "$S.get($MODEL, $ID)"
+              - metavariable-regex:
+                  metavariable: $MODEL
+                  regex: ^[A-Z][A-Za-z0-9]*$
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: LOW
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+
+  # S6 in Python. As predicted in the wave brief, the JS rule does not port
+  # directly: its core pattern `$STORE.$METHOD({ ..., orgId: x, ... })` is an
+  # object literal and cannot parse as Python. This sibling carries the same
+  # logic in kwargs spelling -- create/save taking its tenant key from a
+  # caller-supplied value, session-derived values excluded by name shape, and
+  # a preceding membership check making the argument legitimate. The
+  # `x if x else y` local-variable route into this sink is already covered by
+  # mcp-client-supplied-scope-overrides-session-py-ternary.
+  - id: mcp-write-parent-from-client-argument-py
+    languages: [python]
+    severity: WARNING
+    message: >
+      A create/save call takes its parent or tenant key from a caller-supplied
+      argument rather than the authenticated session. A caller can then plant
+      an object inside a tenant they do not belong to (foreign-parent
+      injection) even when every read path is correctly scoped. Bind the
+      parent to the session's own scope, or verify membership of the supplied
+      value before writing. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+    patterns:
+      - pattern: "$STORE.$METHOD(..., $KEY = $VAL, ...)"
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i)^(create|insert|add|save|put|write|new)(_.*)?$
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+      # session-derived destinations are the correct shape and stay silent
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+      # a membership check on the supplied value makes the argument legitimate
+      - pattern-not-inside:
+          patterns:
+            - pattern: |
+                $CHECK(...)
+                ...
+                $STORE.$METHOD(..., $KEY = $VAL, ...)
+            - metavariable-regex:
+                metavariable: $CHECK
+                regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)
     metadata:
       cwe: ["CWE-639"]
       category: security

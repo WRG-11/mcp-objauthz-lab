@@ -4,10 +4,12 @@
 # on a FALSY left value, so a caller-supplied scope wins whenever it is present
 # and the session scope is reached only when the caller omits it.
 #
-# The write-side spelling at the bottom is the S6 shape. It is covered by this
-# rule rather than one of its own -- verified by running the ruleset against
-# the lab's real source, where this rule fires on the S6 line in tools.py's
-# JavaScript sibling.
+# The ternary pair at the bottom is Python's OTHER idiomatic override spelling
+# (`x if x else y`), covered by mcp-client-supplied-scope-overrides-session-py-
+# ternary. It deliberately resolves to a READ sink: the WRITE-side spelling of
+# a caller-chosen destination has its own rule and fixture now (see
+# write-parent-from-client-argument.py) -- keeping the two apart keeps every
+# fixture's count attributable to exactly one rule.
 
 
 async def vuln_search(store, token, q, org_id):
@@ -34,20 +36,18 @@ async def vuln_update_flow_field(store, token, flow_id, field, value, user_id):
     return ok(store.update_flow_field(effective_user_id, flow_id, field, value))
 
 
-# The WRITE-side spelling: a caller-supplied parent selects which tenant the
-# new object lands in. Poisons another tenant's data instead of leaking it.
-async def vuln_create_in_org(store, token, org_id, title, body):
+# The ternary spelling of the override, on a read sink. The caller-supplied
+# value wins whenever present -- same defect as `or`, Python's other idiom.
+async def vuln_search_ternary(store, token, q, org_id):
     session = resolve_session(store, token)
     # ruleid: mcp-client-supplied-scope-overrides-session-py-ternary
-    target_org_id = org_id if org_id else session.org_id
-    return ok(store.create_note(org_id=target_org_id, owner_id=session.user_id,
-                                title=title, body=body))
+    effective_org_id = org_id if org_id else session.org_id
+    return ok(store.search_notes_by_org(effective_org_id, q))
 
 
-async def fixed_create_in_org(store, token, org_id, title, body):
+async def fixed_search_ternary(store, token, q, org_id):
     """org_id stays in the signature to avoid a breaking API change, and is ignored."""
     session = resolve_session(store, token)
     # ok: mcp-client-supplied-scope-overrides-session-py-ternary
-    target_org_id = session.org_id
-    return ok(store.create_note(org_id=target_org_id, owner_id=session.user_id,
-                                title=title, body=body))
+    effective_org_id = session.org_id
+    return ok(store.search_notes_by_org(effective_org_id, q))

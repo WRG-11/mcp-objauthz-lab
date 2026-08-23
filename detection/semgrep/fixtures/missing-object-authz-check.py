@@ -31,3 +31,21 @@ async def fixed_delete_camel_case_guard(store, token, note_id):
     # ok: mcp-missing-object-authz-check
     store.delete_note(note.id)
     return ok({"deleted": note.id})
+
+
+# The pure-read spelling, mirrored from the JavaScript fixture: a cross-tenant
+# read is the same defect as the mutation, and the rule's read branch covers
+# Python identically.
+async def vuln_read(store, token, doc_id):
+    session = resolve_session(store, token)
+    doc = store.get_doc(doc_id)
+    # ruleid: mcp-missing-object-authz-check
+    return ok(doc)
+
+
+async def fixed_read(store, token, doc_id):
+    session = resolve_session(store, token)
+    doc = store.get_doc(doc_id)
+    require_ownership(session, doc)
+    # ok: mcp-missing-object-authz-check
+    return ok(doc)

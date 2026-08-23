@@ -17,10 +17,13 @@ below are the ones that have actually caught mistakes in this repo.
 
 - [ ] The fixture carries **both** halves — a `ruleid:` case and an `ok:` case.
       A rule that flags everything passes a catch-only test.
-- [ ] Ran it against real third-party code, not just the fixture. The official
-      `@modelcontextprotocol/sdk` in `node_modules/` is 168 files of it and
-      currently produces zero findings; a new rule should keep it that way or
-      explain why not.
+- [ ] Ran it against real third-party code, not just the fixture — **and proved
+      the scan reached it**. Copy `node_modules/@modelcontextprotocol/sdk`
+      somewhere outside `node_modules/` first (semgrep skips that directory
+      even when told otherwise, and a skipped tree reports a clean `0`).
+      Scan the copy, then plant a known-violating snippet inside it and
+      rescan: if the canary does not fire, your `0` is not a result.
+      Current baseline: 344 files of the official SDK, zero findings.
 - [ ] If the rule declares more than one language, every pattern parses in
       **all** of them. Semgrep marks the whole rule invalid otherwise, and the
       scan still exits 0 while reporting nothing.
