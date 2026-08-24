@@ -1,0 +1,122 @@
+rules:
+  - id: mcp-missing-object-authz-check-go
+    languages: [go]
+    severity: ERROR
+    message: >
+      An object resolved from storage by a client-supplied id reaches a
+      mutation without an authorization/ownership check in between. This is
+      the MCP object-level authorization pattern (BOLA/IDOR, CWE-639/862) —
+      see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original
+    patterns:
+      - pattern: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          $STORE.$MUTMETHOD($OBJ.$FIELD)
+      - metavariable-regex:
+          metavariable: $GETMETHOD
+          regex: "(?i)^(Get|Find).*"
+      - metavariable-regex:
+          metavariable: $MUTMETHOD
+          regex: "(?i)^(Delete|Update).*"
+      # Guard exemption list, enumerated one name per block (data, not
+      # prose) — both the exported PascalCase and unexported camelCase
+      # spelling of each of the three guard families, mirroring the -py/.js
+      # sibling's own policy.
+      - pattern-not: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          RequireOrgAccess(...)
+          ...
+      - pattern-not: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          requireOrgAccess(...)
+          ...
+      - pattern-not: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          CheckAccess(...)
+          ...
+      - pattern-not: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          checkAccess(...)
+          ...
+      - pattern-not: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          AssertOwner(...)
+          ...
+      - pattern-not: |
+          $OBJ := $STORE.$GETMETHOD($ID)
+          ...
+          assertOwner(...)
+          ...
+    metadata:
+      cwe: ["CWE-639", "CWE-862"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-client-supplied-scope-overrides-session-go
+    languages: [go]
+    severity: ERROR
+    message: >
+      A client-supplied scope or identity argument can override the
+      server-trusted session scope. Arguments like OrgID/TenantID/
+      ProjectID/UserID must never select whose data a tool operates on —
+      always use the session's own scope and ignore (or reject) the
+      caller-supplied value. Go has no `||`/`??`/ternary operator, so this
+      shows up as a zero-value fallback instead. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
+    patterns:
+      - pattern: |
+          $SCOPE := $ARGS.$SCOPEFIELD
+          if $SCOPE == "" {
+              $SCOPE = $SESSION.$FIELD
+          }
+      # Field-name anchored, same as the JS/PY sibling's $SCOPEPARAM regex —
+      # an ordinary zero-value default (limit, page, timeout) must not
+      # trip this just because it shares the same Go idiom.
+      - metavariable-regex:
+          metavariable: $SCOPEFIELD
+          regex: "(?i)^(org_?id|tenant_?id|project_?id|account_?id|workspace_?id|user_?id|owner_?id)$"
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  - id: mcp-unscoped-query-object-fetch-go
+    languages: [go]
+    severity: WARNING
+    message: >
+      An object is fetched by primary key alone (a struct/ORM `First(&x,
+      id)` lookup), with no tenant key bound into the same query. If the
+      entity is multi-tenant, any caller's id resolves regardless of
+      tenant — the query-scoped form of object-level authorization failure
+      (BOLA/IDOR, CWE-639). Bind the tenant key into the same lookup,
+      sourced from the session. A guard-call detector never sees this,
+      because there is no guard call to be missing — the authorization is
+      the tenant key inside the query itself. Confirm the entity is
+      genuinely tenant-scoped before treating this as a bug.
+      NOTE: this only covers the statically matchable struct/ORM idiom
+      (`db.First(&x, id)`) — a raw SQL string lookup carries its tenant key
+      (or lack of one) inside a string literal semgrep cannot reliably
+      parse, and is NOT covered by this rule. See
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+    #
+    # Deliberately WARNING, not ERROR: same honesty as the JS/PY siblings —
+    # a single call site cannot prove the entity is tenant-scoped, so this
+    # flags the SHAPE for a reader rather than asserting a bug.
+    patterns:
+      - pattern: $DB.First(&$X, $ID)
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: LOW
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
