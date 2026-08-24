@@ -1,6 +1,6 @@
 # Challenges
 
-Nine independent BOLA scenarios, each runnable in under 5 minutes.
+Ten independent BOLA scenarios, each runnable in under 5 minutes.
 Solve them in any order. Solutions are in [`../solutions/`](../solutions/).
 
 | # | File | Pattern | Difficulty |
@@ -14,13 +14,14 @@ Solve them in any order. Solutions are in [`../solutions/`](../solutions/).
 | S7 | [s7.md](s7.md) | Unscoped query — tenant key omitted from the filter | Intermediate |
 | S8 | [s8.md](s8.md) | Resource-URI-as-scope — the resources/read surface | Intermediate |
 | S9 | [s9.md](s9.md) | Authz-from-client-round-tripped-value — an editable share grant | Intermediate |
+| S10 | [s10.md](s10.md) | Forwarded-header-as-scope — a trusted request header (HTTP transport) | Intermediate |
 
 ## Ground rules
 
 - Each challenge runs the server locally over stdio — no network, no third party.
 - Use any MCP client (the included `poc/exploit.js`, Claude Desktop, Cursor, etc.).
 - Do not modify server source; only change env vars and tool/resource arguments.
-- The toggles are independent — setting `LAB_S2` never changes S1/S3/S4/S5/S6/S7/S8/S9.
+- The toggles are independent — setting `LAB_S2` never changes S1/S3/S4/S5/S6/S7/S8/S9/S10.
 - **But every scenario defaults to `vuln` when its variable is unset**, so
   "independent" is not "off". Each challenge's Setup block therefore pins the
   other eight to `fixed`. Run the bare `LAB_S2=vuln node src/server.js` and all

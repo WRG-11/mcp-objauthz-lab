@@ -48,9 +48,12 @@ const fail = (message) => ({
 });
 
 // Turn our typed errors into clean MCP error results instead of crashes.
-const guard = (handler) => async (args) => {
+// `extra` (the SDK's RequestHandlerExtra) is forwarded so a handler that needs
+// the transport-level request context — e.g. HTTP headers via
+// extra.requestInfo — can reach it. Handlers that ignore it are unaffected.
+const guard = (handler) => async (args, extra) => {
   try {
-    return await handler(args);
+    return await handler(args, extra);
   } catch (err) {
     if (
       err instanceof AuthnError ||
@@ -501,5 +504,48 @@ export function registerTools(server, store, modes) {
         ],
       };
     },
+  );
+
+  // ── S10: note_get_scoped ──────────────────────────────────────────────────
+  // FORWARDED-HEADER-AS-SCOPE BOLA (CWE-639 / CWE-290) — the transport surface.
+  //
+  // Every prior scenario reads its scope from a tool ARGUMENT (S1-S7, S9) or a
+  // resource URI (S8). This one reads it from an HTTP REQUEST HEADER. When an
+  // MCP server runs over the streamable-HTTP transport, each tool call carries
+  // the underlying request's headers in `extra.requestInfo.headers`. A server
+  // deployed behind a gateway/proxy is tempted to trust an identity or routing
+  // header — `X-Org-Id` here, `X-Forwarded-For` in the IP-scoping variant — as
+  // the authorization scope. But that header is entirely client-controlled: any
+  // caller can set it. This is the transport-layer sibling of S2's
+  // scope-as-param, and it is exactly the real-world "trusting X-Forwarded-For
+  // for a security decision" class.
+  //
+  //   Exploit: Alice (org_acme) calls note_get_scoped over HTTP with header
+  //            `X-Org-Id: org_globex` → she reads Globex's notes.
+  //
+  // Over the stdio transport there is no requestInfo, so `headerOrg` is
+  // undefined and the tool falls back to the session — the bug only manifests
+  // over HTTP, which is precisely why a stdio-only review never sees it.
+  //
+  // In fixed mode the header is ignored; session.orgId (server-trusted) is
+  // always used.
+  server.registerTool(
+    "note_get_scoped",
+    {
+      description:
+        "List the caller's notes. Honors an X-Org-Id routing header set by the API gateway.",
+      inputSchema: {
+        token: z.string(),
+      },
+    },
+    guard(async ({ token }, extra) => {
+      const session = resolveSession(store, token);
+      // S10 vuln: trust the client-supplied X-Org-Id header as the scope.
+      // S10 fixed: ignore the header; always use session.orgId.
+      const headerOrg = extra?.requestInfo?.headers?.["x-org-id"];
+      const effectiveOrgId =
+        modes.s10 === "vuln" && headerOrg ? headerOrg : session.orgId;
+      return ok(store.listNotesByOrg(effectiveOrgId));
+    }),
   );
 }

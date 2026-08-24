@@ -4,6 +4,42 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] — 2026-08-24
+
+### Added
+
+- **Scenario S10 — Forwarded-header-as-scope**, the lab's first scenario on the
+  **HTTP transport surface**. Over the streamable-HTTP transport the SDK hands
+  each tool call the request's headers in `extra.requestInfo.headers`. The new
+  `note_get_scoped` tool trusts an `X-Org-Id` header — "set by the gateway" — as
+  the org scope, but any client talking to the server directly sets that header
+  itself. It is the transport-layer sibling of S2 (scope-as-param) and the
+  real-world class of *trusting `X-Forwarded-For` for a security decision*.
+  Because stdio carries no headers, S10 only manifests over HTTP — so it ships
+  its own `src/http-server.js`, and a stdio-only review never sees it.
+  (CWE-639 / CWE-290.)
+- `src/http-server.js` — a minimal streamable-HTTP entry point running the same
+  tools and store, the transport S10 needs. `guard()` now forwards the SDK's
+  `extra` (RequestHandlerExtra) so a handler can reach `requestInfo`.
+- Detection rules `mcp-authz-scope-from-request-header` (+ `-py` FastMCP
+  sibling) plus fixtures. They key on the header **name**, so a non-scope
+  header (`X-Request-Id`) read for logging stays silent — the two-way canary.
+- `challenges/s10.md` + `solutions/s10.md`. S10's challenge Setup uses the HTTP
+  server; every other challenge's Setup now also pins `LAB_S10=fixed`.
+
+### Changed
+
+- Rule count 20 → 22 (+2 S10). Fixture finding count 41 → 44 (23 JavaScript +
+  15 Python + 3 Go + 3 Rust). Scenario count 9 → 10; tool count 14 → 15
+  (`note_get_scoped`). PoC two-way gate 24 → 26 rows (two S10 arms, run over a
+  real HTTP round-trip with a spoofed header). `docs-consistency.test.js` now
+  accepts an `http-server.js` Setup command and counts up to 16 tools.
+
+Verified before release: 51 unit tests, PoC two-way gate 26/26 rows (incl. the
+S10 HTTP arm proving a spoofed `X-Org-Id` reads cross-org in vuln and is ignored
+in fixed), and `semgrep --config detection/semgrep/` gives 44 findings with 0
+parse errors across all four languages.
+
 ## [3.6.0] — 2026-08-24
 
 ### Added

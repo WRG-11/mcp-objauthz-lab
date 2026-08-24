@@ -38,6 +38,9 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-client-supplied-scope-overrides-session-rust` | S2 (Rust) | a client-destructured scope field (`org_id` from `Parameters<T>`) reaching the store call in place of the session's own; the anchored name regex leaves a `session.org_id` field access silent |
 | `mcp-admin-named-tool-missing-role-check-rust` | S5 (Rust) | an admin-named `#[tool]` async fn whose body never calls `require_admin_role`/`check_admin_role`/`assert_admin_role` — naming is documentation, not enforcement |
 
+| `mcp-authz-scope-from-request-header` | S10 | a scope/identity request header (`X-Org-Id`, `X-Forwarded-For`, ...) read from `extra.requestInfo.headers` over the streamable-HTTP transport and usable as the tenant scope; keyed on the header **name**, so a non-scope header (`X-Request-Id`) read for logging stays silent. **WARNING** |
+| `mcp-authz-scope-from-request-header-py` | S10 (Python) | the FastMCP spelling: the same scope-shaped header read via `get_http_headers()` / a `.get()` or subscript. **WARNING** |
+
 ### Go pack
 
 [`semgrep/mcp-object-authz-go.yml`](semgrep/mcp-object-authz-go.yml) covers

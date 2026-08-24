@@ -10,8 +10,8 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing fourteen MCP tools and one MCP resource
-across **nine independent BOLA scenarios**. Each scenario is a different variant
+It is a multi-tenant note server exposing fifteen MCP tools and one MCP resource
+across **ten independent BOLA scenarios**. Each scenario is a different variant
 of the same bug class, toggled by its own environment variable. Run them all at
 once or isolate one at a time.
 
@@ -40,7 +40,7 @@ scenarios), just in production instead of a lab.
 
 ## Try the challenges
 
-Nine hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+Ten hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
 until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
@@ -54,6 +54,7 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S7](challenges/s7.md) | Unscoped query — tenant key omitted from the filter (the real-world shape) |
 | [S8](challenges/s8.md) | Resource-URI-as-scope — the resources/read surface, not tools/call |
 | [S9](challenges/s9.md) | Authz-from-client-round-tripped-value — an editable share grant |
+| [S10](challenges/s10.md) | Forwarded-header-as-scope — a trusted request header (HTTP transport) |
 
 ## Quickstart (< 5 minutes)
 
@@ -62,13 +63,13 @@ Requirements: **Node.js ≥ 20**.
 ```bash
 npm install
 npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
-npm run poc # 24-row two-way gate — the tools/resources wired end-to-end over MCP
+npm run poc # 26-row two-way gate — the tools/resources wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (24/24 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (26/26 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (9 scenarios + hardened build)
+MCP object-level authorization lab — two-way gate (10 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -93,10 +94,12 @@ MCP object-level authorization lab — two-way gate (9 scenarios + hardened buil
   S9   vuln   note_share_redeem tampered grant (Alice→Globex) LEAKED    LEAKED    ✓
   S9   fixed  note_share_redeem tampered grant (Alice→Globex) DENIED    DENIED    ✓
   S9   fixed  note_share_redeem own grant     (Alice→Acme)   ALLOWED   ALLOWED   ✓
+  S10  vuln   note_get_scoped X-Org-Id=org_globex (Alice over HTTP) LEAKED    LEAKED    ✓
+  S10  fixed  note_get_scoped X-Org-Id=org_globex (Alice over HTTP) SCOPED    SCOPED    ✓
   ALL  fixed  11 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (24/24 rows OK)
+  Two-way gate: PASS (26/26 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -451,6 +454,29 @@ at the point a round-tripped client value is trusted again.
 
 ---
 
+## Scenario S10 — Forwarded-header-as-scope
+
+**Tool:** `note_get_scoped`  **Class:** CWE-639 / CWE-290 — a client-supplied request header trusted as scope  **Toggle:** `LAB_S10`  ·  **Transport:** HTTP only (`src/http-server.js`)
+
+Every other scenario reads its scope from a tool argument or a resource URI.
+S10 reads it from an HTTP request **header**. Over the streamable-HTTP transport
+the SDK hands each tool call the request headers in `extra.requestInfo.headers`,
+and `note_get_scoped` trusts an `X-Org-Id` header — "set by the gateway" — as the
+org scope. But any client talking to the server directly sets that header
+itself, so it is client-controlled input wearing the costume of infrastructure.
+This is the transport-layer sibling of S2, and the real-world class of
+*trusting `X-Forwarded-For` for a security decision* (the IP-scoping variant is
+the same bug, same fix). Because stdio carries no request headers, the bug only
+exists in the HTTP deployment — which is why S10 ships its own
+`src/http-server.js`, and why a review that only exercises the stdio server
+never sees it.
+
+**Challenge:** You are Alice (`alice-token`, org Acme). Connect an MCP client to
+`http://127.0.0.1:3010/mcp` and read Globex's notes using one extra request
+header. See [`challenges/s10.md`](challenges/s10.md).
+
+---
+
 ## Detection rules — automate the hunt
 
 [`detection/`](detection/README.md) ships 14 [Semgrep](https://semgrep.dev)
@@ -541,7 +567,7 @@ Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
-LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed npm start
+LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed npm start
 
 # Windows PowerShell
 $env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; npm start
@@ -550,7 +576,7 @@ $env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixe
 Isolate one scenario (e.g. test only S2):
 
 ```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed npm start
+LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed npm start
 ```
 
 ---
