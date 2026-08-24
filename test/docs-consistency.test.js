@@ -148,9 +148,10 @@ test("stated tool count matches the tools actually registered", () => {
 });
 
 test("detection README lists every rule id in the ruleset", () => {
-  const rules = [
-    ...read("detection/semgrep/mcp-object-authz.yml").matchAll(/^\s+- id:\s*(\S+)/gm),
-  ].map((m) => m[1]);
+  const rules = readdirSync(join(root, "detection/semgrep"))
+    .filter((f) => f.endsWith(".yml"))
+    .flatMap((f) => [...read(`detection/semgrep/${f}`).matchAll(/^\s+- id:\s*(\S+)/gm)])
+    .map((m) => m[1]);
   const doc = read("detection/README.md");
 
   assert.ok(rules.length >= 6, "expected at least six rules");

@@ -4,6 +4,97 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] — 2026-08-24
+
+### Added
+
+- **Scenario S8 — Resource-URI-as-scope**, the lab's first scenario on the
+  `resources/read` MCP primitive instead of `tools/call`: a `note://{token}/{orgId}/{noteId}`
+  resource template whose handler trusts the `orgId` URI path segment as the
+  authorization scope. Every prior scenario (S1-S7) is a tool; `resources/*`
+  has its own registration API, its own handler signature (`(uri, variables)`
+  instead of a single args object), and its own client call — a review that
+  reads "every tool" never sees this surface. It is also quieter than a
+  tool-call exploit in practice: MCP hosts commonly gate tool calls behind an
+  approval prompt while treating a resource read as inert.
+- Detection rule `mcp-resource-uri-variable-used-as-scope` (S8) plus its
+  `-py` FastMCP sibling — a resource/tool-agnostic `$VAL` axis borrowed from
+  S6's rule: session-derived scope stays silent, a caller-supplied URI
+  variable used as the scope fires.
+- Fixture `resource-uri-variable-used-as-scope.js`/`.py` — one vulnerable
+  case, the fixed sibling, and a legitimate sibling whose URI template
+  carries no tenant segment at all.
+- `challenges/s8.md` + `solutions/s8.md`.
+- **Scenario S9 — Authz-from-client-round-tripped-value**, on the tool-
+  chaining surface: `note_share_prepare` mints a correctly-authorized opaque
+  grant for the caller's own note; `note_share_redeem` decodes it and serves
+  whatever `noteId` is inside, with no re-check against the redeeming
+  session. The grant is plain base64url JSON with no signature, so no
+  cryptography is needed to tamper with it — decode, edit `noteId`,
+  re-encode. MCP tool chains have no server-side continuity between two
+  `tools/call` invocations; every value crossing that gap travels through
+  the client (and, in an agentic loop, through the calling model's own
+  context).
+- `challenges/s9.md` + `solutions/s9.md`.
+- Go language pack: three `-go` rules covering S1, S2, and S7 for MCP
+  servers built on `modelcontextprotocol/go-sdk`, in their own file
+  (`detection/semgrep/mcp-object-authz-go.yml`) since Go's syntax (no
+  `||`/ternary, PascalCase/camelCase casing) can't parse as JavaScript or
+  Python.
+  - `mcp-missing-object-authz-check-go` (S1) — the guard-call exemption
+    list carries both exported and unexported spelling of each guard name.
+  - `mcp-client-supplied-scope-overrides-session-go` (S2) — Go's zero-value
+    fallback idiom, the language's spelling of the override this rule's
+    JS/PY siblings catch via `||`/ternary.
+  - `mcp-unscoped-query-object-fetch-go` (S7) — the struct/ORM primary-key
+    lookup idiom (`db.First(&x, id)`). WARNING, same honesty as its
+    siblings, and an explicit gap: a raw-SQL-string lookup is not covered
+    (see `detection/README.md`).
+- Rust language pack: three `-rust` rules covering S1, S2, and S5 for MCP
+  servers built on the `rmcp` crate, in their own file
+  (`detection/semgrep/mcp-object-authz-rust.yml`). Semgrep's Rust support was
+  verified to parse the real `rmcp` handler idiom
+  (`Parameters(T { .. }): Parameters<T>` destructuring on a `#[tool_router]`
+  impl) before the rules were written.
+  - `mcp-missing-object-authz-check-rust` (S1) — the `let`-bound fetch/mutate
+    sequence, guard-call exemptions in snake_case.
+  - `mcp-client-supplied-scope-overrides-session-rust` (S2) — a
+    client-destructured scope field reaching the sink in place of the
+    session's own; anchored name regex keeps a session field access silent.
+  - `mcp-admin-named-tool-missing-role-check-rust` (S5) — an admin-named
+    `#[tool]` async fn whose body never calls a role check.
+
+### Changed
+
+- The Semgrep scanner (`action.yml`, CI, and the contributor docs) now loads
+  the whole `detection/semgrep/` directory instead of the single
+  `mcp-object-authz.yml` file, so per-language rule files (Go, Rust, and any
+  future language) load automatically without re-touching the shared entry
+  point. `docs-consistency.test.js` enumerates rule ids across all `*.yml`
+  files accordingly.
+- Rule count 12 → 20; Python-carrying rules 8 → 9. Fixture finding count
+  33 → 41 (21 JavaScript + 14 Python + 3 Go + 3 Rust) — S8 adds exactly one
+  ruleid line per language (JS/Python), the Go pack three and the Rust pack
+  three. S9 adds no fixture: measured against a probe file, the existing
+  `mcp-missing-object-authz-check` (S1's rule) already catches its
+  assignment-carrying vuln shape.
+- `src/tools.js` now registers one MCP resource and two more tools (fourteen
+  total) alongside the original twelve. `src/server.js` reads `LAB_S8` and
+  `LAB_S9` alongside `LAB_S1..LAB_S7`.
+- `poc/exploit.js`'s two-way gate grows from 19 to 24 rows (two S8 rows,
+  three S9 rows; the `ALL`-fixed cross-tenant-route count grows from 9 to 11
+  to include the resource read and the tampered-grant redeem).
+- Running the ruleset against this lab's own `src/` now flags 7 of 9
+  scenarios (S2, S3, S4, S6, S7, S8, S9) instead of 5 of 7 — S1 and S5 remain
+  the only two missed, for the same toggle-blindness reason documented in
+  `detection/README.md`.
+
+Verified before release: 51 unit tests (including `docs-consistency.test.js`),
+PoC two-way gate 24/24 rows, fixture scan 41/41 matching `ci.yml`'s `want`,
+dogfood scan against `src/` 7 → 10 findings (did not drop), and zero findings
+across the official `@modelcontextprotocol/sdk` with a planted canary proving
+the scan reached that tree.
+
 ## [3.5.0] — 2026-08-23
 
 ### Added

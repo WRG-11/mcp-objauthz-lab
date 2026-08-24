@@ -2,7 +2,7 @@
 
 Thanks for looking. This repo is two things that need different kinds of help:
 
-- a **deliberately vulnerable MCP server** (`src/`) with seven planted bugs and
+- a **deliberately vulnerable MCP server** (`src/`) with nine planted bugs and
   a challenge per bug (`challenges/`), and
 - a **Semgrep ruleset** (`detection/`) that finds those same bugs in real MCP
   servers.
@@ -27,7 +27,7 @@ noise. When reporting one, the minimal reproducing snippet matters more than
 the explanation.
 
 A miss (a real authorization bug the rules walked past) is just as welcome.
-The rules currently catch 5 of the 7 scenarios against this lab's own source;
+The rules currently catch 7 of the 9 scenarios against this lab's own source;
 `detection/README.md` explains why, honestly, and that limitation is a
 starting point rather than a defence.
 
@@ -84,11 +84,11 @@ npm test                                        # the lab's own unit tests
 npm run poc                                     # the exploit walkthroughs
 
 pip install semgrep
-semgrep --config detection/semgrep/mcp-object-authz.yml \
+semgrep --config detection/semgrep/ \
         detection/semgrep/fixtures/ --no-git-ignore --quiet --json \
         --output=/tmp/fixtures.json             # count must match ci.yml
 
-semgrep --config detection/semgrep/mcp-object-authz.yml src/
+semgrep --config detection/semgrep/ src/
 ```
 
 The last one is the dogfood check: the rules must keep finding the planted

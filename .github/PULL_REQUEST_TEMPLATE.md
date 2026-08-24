@@ -11,7 +11,7 @@ below are the ones that have actually caught mistakes in this repo.
 
 - [ ] `npm test` and `npm run poc` pass
 - [ ] Semgrep fixture count matches the `want` value in `.github/workflows/ci.yml`
-- [ ] The rules still find the planted bugs in `src/` (`semgrep --config detection/semgrep/mcp-object-authz.yml src/`)
+- [ ] The rules still find the planted bugs in `src/` (`semgrep --config detection/semgrep/ src/`)
 
 ## If this touches a detection rule
 

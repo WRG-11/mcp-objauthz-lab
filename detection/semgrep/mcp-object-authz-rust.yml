@@ -1,0 +1,152 @@
+rules:
+  # Rust sibling of mcp-missing-object-authz-check. The JS/Python rule uses a
+  # bare assignment (`$OBJ = $STORE.$GETMETHOD($ID)`); Rust binds with `let`,
+  # so the sequence pattern is re-anchored on the `let` statement rather than
+  # ported verbatim. Fetch and mutate both take a reference (`&note_id`,
+  # `&note.id`), matching the real rmcp handler shape the fixture uses.
+  - id: mcp-missing-object-authz-check-rust
+    languages: [rust]
+    severity: ERROR
+    message: >
+      An object resolved from storage by a client-supplied id reaches a
+      mutation without an authorization/ownership check in between. This is
+      the MCP object-level authorization pattern (BOLA/IDOR, CWE-639/862) —
+      see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original
+    patterns:
+      - pattern: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          $STORE.$MUT(&$OBJ.$FIELD);
+      - metavariable-regex:
+          metavariable: $GET
+          regex: "(?i)^(get|find).*"
+      - metavariable-regex:
+          metavariable: $MUT
+          regex: "(?i)^(delete|update).*"
+      - pattern-not: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          require_org_access(...);
+          ...
+      - pattern-not: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          require_ownership(...);
+          ...
+      - pattern-not: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          require_access(...);
+          ...
+      - pattern-not: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          check_access(...);
+          ...
+      - pattern-not: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          check_ownership(...);
+          ...
+      - pattern-not: |
+          let $OBJ = $STORE.$GET(&$ID);
+          ...
+          assert_owner(...);
+          ...
+    metadata:
+      cwe: ["CWE-639", "CWE-862"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  # Rust sibling of mcp-client-supplied-scope-overrides-session. The JS/Python
+  # rule matches a fallback EXPRESSION (`param || session.field`,
+  # `param or session.field`); rmcp handler params destructured from
+  # `Parameters<T>` are plain (non-Option) fields, so there is no idiomatic
+  # Rust fallback/coalesce spelling of the same defect to port. Instead this
+  # matches the shape the brief's own fixture uses: a client-destructured
+  # scope field reaching the sink directly, in place of the session's own
+  # field. The anchored `^...$` name regex is what keeps this from being a
+  # "flag every scope use" rule — a session-derived field access
+  # (`&self.session.org_id`) binds to $SCOPEPARAM as the text
+  # "self.session.org_id", which the anchored regex does not match, so it
+  # stays silent without a separate exclusion pattern (measured).
+  - id: mcp-client-supplied-scope-overrides-session-rust
+    languages: [rust]
+    severity: ERROR
+    message: >
+      A client-supplied scope or identity argument can override the
+      server-trusted session scope. Fields like org_id/tenant_id/project_id/
+      user_id destructured from a tool's own Parameters<T> must never select
+      whose data a tool operates on — always use the session's own scope
+      instead of the caller-supplied field. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
+    patterns:
+      - pattern: $STORE.$METHOD($ID, &$SCOPEPARAM)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: "(?i)^(get|find).*"
+      - metavariable-regex:
+          metavariable: $SCOPEPARAM
+          regex: "(?i)^(org_id|tenant_id|project_id|account_id|workspace_id|user_id|owner_id)$"
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
+
+  # Rust sibling of mcp-admin-named-tool-missing-role-check(-py). The JS rule
+  # is written against `server.registerTool(...)` with an arrow-function
+  # handler; Python's FastMCP sibling keys on a decorated function. rmcp tools
+  # are `#[tool]`-annotated async methods on a `#[tool_router]` impl block, so
+  # this sibling keys on the function name the same way the -py sibling does:
+  # naming is documentation, not enforcement, and only a role check in the
+  # body enforces it. The `#[tool]` attribute is deliberately NOT part of the
+  # pattern -- attribute matching in this Rust grammar was not verified to
+  # bind reliably, and the function name + body shape alone is already the
+  # -py sibling's own selection axis (attribute presence is a secondary
+  # signal, not required).
+  - id: mcp-admin-named-tool-missing-role-check-rust
+    languages: [rust]
+    severity: ERROR
+    message: >
+      A tool handler with an admin-sounding name never calls a role-check
+      function in its body. Naming a handler "admin_*" / "*_admin_*" is
+      documentation, not enforcement — any valid token can reach it unless
+      the handler actually verifies the caller's role. CWE-863 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass
+    patterns:
+      - pattern: |
+          async fn $FUNC(...) -> $RET {
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "(?i).*admin.*"
+      - pattern-not: |
+          async fn $FUNC(...) -> $RET {
+            ...
+            require_admin_role(...);
+            ...
+          }
+      - pattern-not: |
+          async fn $FUNC(...) -> $RET {
+            ...
+            check_admin_role(...);
+            ...
+          }
+      - pattern-not: |
+          async fn $FUNC(...) -> $RET {
+            ...
+            assert_admin_role(...);
+            ...
+          }
+    metadata:
+      cwe: ["CWE-863"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab
