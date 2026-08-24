@@ -3,17 +3,17 @@
 `mcp-objauthz-lab` is a **deliberately vulnerable, synthetic teaching lab** for
 practising object-level authorization (BOLA / cross-tenant IDOR) review in Model
 Context Protocol (MCP) servers. It ships a minimal multi-tenant MCP server with
-**seven intentionally planted** object-level authorization flaws (scenarios S1-S7,
-each an independent tool handler) plus a hunt-checklist. All data is synthetic —
-no real users, secrets, or production systems; the server is meant to be run
-locally.
+**eight intentionally planted** object-level authorization flaws (scenarios
+S1-S8, each an independent tool or resource handler) plus a hunt-checklist. All
+data is synthetic — no real users, secrets, or production systems; the server
+is meant to be run locally.
 
 ## The planted flaws are intentional — do not report them
 
-All seven planted authorization bugs are the **point** of the exercise (see the
-README hunt-checklist and the `LAB_MODE` / `LAB_S1`-`LAB_S7` toggles). They are
+All eight planted authorization bugs are the **point** of the exercise (see the
+README hunt-checklist and the `LAB_MODE` / `LAB_S1`-`LAB_S8` toggles). They are
 not vulnerabilities. Note that every toggle **defaults to `vuln`**, so a server
-started with no environment set has all seven live — that is intended.
+started with no environment set has all eight live — that is intended.
 
 ## Reporting an *unintended* issue
 

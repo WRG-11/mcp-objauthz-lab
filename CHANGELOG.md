@@ -4,6 +4,50 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] — 2026-08-24
+
+### Added
+
+- **Scenario S8 — Resource-URI-as-scope**, the lab's first scenario on the
+  `resources/read` MCP primitive instead of `tools/call`: a `note://{token}/{orgId}/{noteId}`
+  resource template whose handler trusts the `orgId` URI path segment as the
+  authorization scope. Every prior scenario (S1-S7) is a tool; `resources/*`
+  has its own registration API, its own handler signature (`(uri, variables)`
+  instead of a single args object), and its own client call — a review that
+  reads "every tool" never sees this surface. It is also quieter than a
+  tool-call exploit in practice: MCP hosts commonly gate tool calls behind an
+  approval prompt while treating a resource read as inert.
+- Detection rule `mcp-resource-uri-variable-used-as-scope` (S8) plus its
+  `-py` FastMCP sibling — a resource/tool-agnostic `$VAL` axis borrowed from
+  S6's rule: session-derived scope stays silent, a caller-supplied URI
+  variable used as the scope fires.
+- Fixture `resource-uri-variable-used-as-scope.js`/`.py` — one vulnerable
+  case, the fixed sibling, and a legitimate sibling whose URI template
+  carries no tenant segment at all.
+- `challenges/s8.md` + `solutions/s8.md`.
+
+### Changed
+
+- Rule count 12 → 14; Python-carrying rules 8 → 9. Fixture finding count
+  33 → 35 (21 JavaScript + 14 Python) — S8 adds exactly one ruleid line per
+  language, its fixed build and its no-tenant-segment sibling both silent by
+  design.
+- `src/tools.js` now registers one MCP resource alongside its twelve tools.
+  `src/server.js` reads `LAB_S8` alongside `LAB_S1..LAB_S7`.
+- `poc/exploit.js`'s two-way gate grows from 19 to 21 rows (two new S8 rows;
+  the `ALL`-fixed cross-tenant-route count grows from 9 to 10 to include the
+  resource read).
+- Running the ruleset against this lab's own `src/` now flags 6 of 8
+  scenarios (S2, S3, S4, S6, S7, S8) instead of 5 of 7 — S1 and S5 remain the
+  only two missed, for the same toggle-blindness reason documented in
+  `detection/README.md`.
+
+Verified before release: 51 unit tests (including `docs-consistency.test.js`),
+PoC two-way gate 21/21 rows, fixture scan 35/35 matching `ci.yml`'s `want`,
+dogfood scan against `src/` 7 → 8 findings (did not drop), and zero findings
+across the official `@modelcontextprotocol/sdk` with a planted canary proving
+the scan reached that tree.
+
 ## [3.5.0] — 2026-08-23
 
 ### Added

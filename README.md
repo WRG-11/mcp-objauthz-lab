@@ -10,9 +10,10 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing twelve MCP tools across **seven independent
-BOLA scenarios**. Each scenario is a different variant of the same bug class, toggled
-by its own environment variable. Run them all at once or isolate one at a time.
+It is a multi-tenant note server exposing twelve MCP tools and one MCP resource
+across **eight independent BOLA scenarios**. Each scenario is a different variant
+of the same bug class, toggled by its own environment variable. Run them all at
+once or isolate one at a time.
 
 ## Why this lab exists
 
@@ -39,7 +40,7 @@ scenarios), just in production instead of a lab.
 
 ## Try the challenges
 
-Seven hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+Eight hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
 until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
@@ -51,6 +52,7 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S5](challenges/s5.md) | Role/token-type bypass — admin-named tool, no role check |
 | [S6](challenges/s6.md) | Foreign-parent injection — create trusts a caller-supplied org |
 | [S7](challenges/s7.md) | Unscoped query — tenant key omitted from the filter (the real-world shape) |
+| [S8](challenges/s8.md) | Resource-URI-as-scope — the resources/read surface, not tools/call |
 
 ## Quickstart (< 5 minutes)
 
@@ -58,14 +60,14 @@ Requirements: **Node.js ≥ 20**.
 
 ```bash
 npm install
-npm test    # 51 unit tests — auth.js/store.js in isolation
-npm run poc # 19-row two-way gate — the tools wired end-to-end over MCP
+npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
+npm run poc # 21-row two-way gate — the tools/resources wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (19/19 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (21/21 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (7 scenarios + hardened build)
+MCP object-level authorization lab — two-way gate (8 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -85,10 +87,12 @@ MCP object-level authorization lab — two-way gate (7 scenarios + hardened buil
   S6   fixed  note_create_in_org org_id=org_globex (Alice)   SCOPED    SCOPED    ✓
   S7   vuln   note_get_by_query cross-tenant (Alice→Globex)  LEAKED    LEAKED    ✓
   S7   fixed  note_get_by_query cross-tenant (Alice→Globex)  DENIED    DENIED    ✓
-  ALL  fixed  9 cross-tenant routes (Bob→Acme)               BLOCKED   BLOCKED   ✓
+  S8   vuln   resources/read cross-tenant (Alice→Globex)     LEAKED    LEAKED    ✓
+  S8   fixed  resources/read cross-tenant (Alice→Globex)     DENIED    DENIED    ✓
+  ALL  fixed  10 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (19/19 rows OK)
+  Two-way gate: PASS (21/21 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -98,7 +102,7 @@ same-org access still works (no false positive).
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
-access (an admin's cross-org read, a user's own note) still working. Each S1-S7
+access (an admin's cross-org read, a user's own note) still working. Each S1-S8
 arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
 without these rows the hardened build the section below tells you to run would
 have no coverage at all.
@@ -352,12 +356,57 @@ exactly why the S1-style "look for the missing guard" reflex walks past it.
 
 ---
 
+## Scenario S8 — Resource-URI-as-scope
+
+**Resource:** `note://{token}/{orgId}/{noteId}`
+**Class:** CWE-639 — a caller-writable URI segment trusted as scope
+**Toggle:** `LAB_S8`
+
+S1-S7 are all tools (`tools/call`). This one lives on `resources/*`, a
+separate MCP primitive with its own registration API, its own handler
+signature (`(uri, variables)` instead of a single args object), and its own
+client-side call (`resources/read`). A review that reads "every tool" never
+sees it.
+
+The resource template turns the tenant into a URI path segment — which the
+*caller* writes. In vuln mode the handler trusts that segment as the scope.
+Identity still comes from the `{token}` segment, resolved through the same
+`resolveSession()` every tool uses; only the *scope* segment is the planted
+bug. It is also quieter than a tool-call exploit: many MCP hosts gate tool
+calls behind an approval prompt but treat a resource read as inert reference
+material, with lighter or no approval at all.
+
+**Challenge:** Alice (org Acme) wants to read a Globex note through
+`resources/read`, despite never being a Globex member, and without calling a
+single tool.
+
+<details>
+<summary>Hint</summary>
+
+The URI template has three variables: `token`, `orgId`, `noteId`. One is who
+you are. One is what you want. What is the third one actually used for?
+</details>
+
+<details>
+<summary>Answer</summary>
+
+In `LAB_S8=vuln` the handler reads `note://alice-token/org_globex/n_globex_1`,
+resolves Alice's session from `token`, then uses the `orgId` *path segment* —
+not the session's own org — as the scope: `store.findNoteBy({ id: noteId,
+orgId })`. The fix (`LAB_S8=fixed`) ignores that segment and uses
+`session.orgId` instead. The URI template still carries `{orgId}` in both
+builds — removing it would be a breaking template change — it is simply never
+trusted as authorization.
+</details>
+
+---
+
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 12 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 14 [Semgrep](https://semgrep.dev)
 rules — one per code shape above, with Python siblings where the JavaScript
 spelling cannot parse as Python — that flag these patterns in **your own**
-MCP server source, not just this lab's. **Eight of the twelve run against
+MCP server source, not just this lab's. **Nine of the fourteen run against
 Python as well as JavaScript/TypeScript**, which matters because the
 reference MCP SDKs ship in both.
 
@@ -367,11 +416,13 @@ S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
 no toggle, guard simply absent — both fire exactly as designed; the only code
 they go quiet on is a handler where the guard is *written but gated behind a
 runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
-the measured decision and the fixtures pinning it). Against the official
-`@modelcontextprotocol/sdk` the ruleset produces **zero findings** — 344
-files of real third-party code, measured with a planted canary proving the
-scan actually reached the tree (semgrep silently skips `node_modules`, so an
-unverified `0` is not a result).
+the measured decision and the fixtures pinning it). With S8 added, the
+current measurement against this lab's own source is **6 of 8 scenarios
+flagged (S2, S3, S4, S6, S7, S8)** — S1 and S5 are the only two still missed,
+for that same toggle-blindness reason. Against the official
+`@modelcontextprotocol/sdk` the ruleset produces **zero findings**, measured
+with a planted canary proving the scan actually reached the tree (semgrep
+silently skips `node_modules`, so an unverified `0` is not a result).
 
 One of those five is worth spelling out, because it was wrong until 3.4.0. S6
 appeared covered: scans reported a finding inside `note_create_in_org`. What
@@ -400,10 +451,10 @@ steps:
 |---|---|
 | [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
 | [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
-| [`src/tools.js`](src/tools.js) | Twelve tools. Seven planted-bug tools (one per scenario). |
-| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S6` env vars, passes a `modes` object to `registerTools`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 19-row two-way gate: all 7 scenarios in isolation, plus the all-`fixed` hardened build. |
-| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (39 tests, no MCP transport involved). |
+| [`src/tools.js`](src/tools.js) | Twelve tools plus one resource (`note://{token}/{orgId}/{noteId}`). Eight planted-bug handlers (one per scenario, S1-S8). |
+| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S8` env vars, passes a `modes` object to `registerTools`. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 21-row two-way gate: all 8 scenarios in isolation, plus the all-`fixed` hardened build. |
+| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (42 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
 the server resolves to a fixed user, org, and role. The caller never asserts its
@@ -426,21 +477,22 @@ Each scenario is controlled by an independent env var (all default to `"vuln"`):
 | `LAB_S5` | S5 — `note_admin_get` | No role check; any token reaches cross-org lookup | `requireAdminRole()` blocks non-admins |
 | `LAB_S6` | S6 — `note_create_in_org` | `org_id` param trusted as write target | `org_id` ignored; note created in session's own org |
 | `LAB_S7` | S7 — `note_get_by_query` | tenant key omitted from the query filter; any org's id resolves | `orgId` bound into the same filter |
+| `LAB_S8` | S8 — `note://` resource | `orgId` URI path segment trusted as scope | URI segment ignored; session's own org used |
 
 Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
-LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed npm start
+LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed npm start
 
 # Windows PowerShell
-$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; npm start
+$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; npm start
 ```
 
 Isolate one scenario (e.g. test only S2):
 
 ```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed npm start
+LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed npm start
 ```
 
 ---
@@ -472,6 +524,10 @@ but forgets to check *whether you may touch this object*":
 - [ ] **Create/update accepting a foreign parent (→ S6).** `create(parent_id=…)`
   accepts a parent the caller is not a member of, injecting an object into
   another tenant.
+- [ ] **Resource URI segment trusted as scope (→ S8).** A `resources/read`
+  handler binds a tenant/scope key straight from a URI template variable
+  instead of the session — easy to miss because a review that only reads
+  `tools/*` handlers never looks at `resources/*` at all.
 
 The exploit primitive is always the same: authenticate as tenant **B**, call the
 suspect tool with an object or scope that belongs to tenant **A**, and see whether
@@ -495,7 +551,7 @@ The most useful contribution to a detection ruleset is a **false positive** —
 a rule that fires on correctly authorized code. A gate wider than the defect
 it targets gets switched off, and a switched-off rule protects nothing, so
 those are treated as real defects here. Misses are just as welcome; the rules
-catch 5 of the 7 scenarios against this lab's own source and
+catch 6 of the 8 scenarios against this lab's own source and
 [`detection/README.md`](detection/README.md) says why.
 
 There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has
