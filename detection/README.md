@@ -13,7 +13,7 @@ code, not just this lab's.
 scenarios. Nine of the fourteen run against **Python as well as
 JavaScript/TypeScript**: three shared rules declare both, and six `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks):
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each, detailed under their own headings below), for **20 rules across the `detection/semgrep/` directory** — the table lists all of them:
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
