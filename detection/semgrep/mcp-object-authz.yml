@@ -814,3 +814,63 @@ rules:
       confidence: MEDIUM
       references:
         - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+
+  # S10: forwarded-header-as-scope. Transport-layer sibling of S2. Over the
+  # streamable-HTTP transport a tool receives the request headers in
+  # extra.requestInfo.headers; trusting a tenant/identity header as the scope
+  # is the real-world "trusting X-Forwarded-For for a security decision" class.
+  # Keyed on the header NAME, so a non-scope header (x-request-id) read for
+  # logging stays silent -- the two-way canary. WARNING, like S7/S8: it flags
+  # the shape for a reader rather than proving intent.
+  - id: mcp-authz-scope-from-request-header
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      An MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For,
+      ...) from the transport request and can use it to select scope. A request
+      header is entirely client-controlled -- any caller sets it -- so it must
+      never decide whose data a tool returns. Over the streamable-HTTP
+      transport this value arrives in extra.requestInfo.headers; derive the
+      scope from the server-trusted session instead. CWE-639/CWE-290 -- see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+    patterns:
+      - pattern-either:
+          - pattern: $E.requestInfo.headers[$HDR]
+          - pattern: $E.requestInfo.headers.get($HDR)
+          - pattern: $REQ.headers[$HDR]
+          - pattern: $REQ.headers.get($HDR)
+      - metavariable-regex:
+          metavariable: $HDR
+          regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+    metadata:
+      cwe: ["CWE-639", "CWE-290"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+
+  # S10 in Python. FastMCP exposes request headers via get_http_headers() (a
+  # dict); the access spelling is headers.get("x-org-id") or a subscript.
+  - id: mcp-authz-scope-from-request-header-py
+    languages: [python]
+    severity: WARNING
+    message: >
+      A FastMCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For,
+      ...) via get_http_headers() and can use it to select scope. A request
+      header is entirely client-controlled, so it must never decide whose data
+      a tool returns; derive the scope from the server-trusted session instead.
+      CWE-639/CWE-290 -- see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+    patterns:
+      - pattern-either:
+          - pattern: $H.get($HDR)
+          - pattern: $H[$HDR]
+      - metavariable-regex:
+          metavariable: $HDR
+          regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+    metadata:
+      cwe: ["CWE-639", "CWE-290"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope

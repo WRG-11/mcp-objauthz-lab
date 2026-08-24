@@ -59,7 +59,7 @@ test("each challenge's Setup pins every OTHER scenario to fixed", () => {
     const n = Number(file.match(/^s(\d+)\.md$/)[1]);
     const setup = read(`challenges/${file}`)
       .split("\n")
-      .find((l) => /^LAB_.*node src\/server\.js/.test(l));
+      .find((l) => /^LAB_.*node src\/(http-)?server\.js/.test(l));
 
     assert.ok(setup, `${file}: no Setup command line found`);
 
@@ -136,6 +136,7 @@ test("stated tool count matches the tools actually registered", () => {
   const words = {
     6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
     11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+    15: "fifteen", 16: "sixteen",
   };
   const readme = read("README.md");
   const claim = readme.match(/exposing (\w+) MCP tools/);
