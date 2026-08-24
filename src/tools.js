@@ -1,4 +1,5 @@
-// MCP tool definitions — 7 independent BOLA scenarios across 12 tools.
+// MCP tool definitions — 8 independent BOLA scenarios across 14 tools, plus
+// S8 on the resources/read surface.
 //
 // Tool inventory:
 //
@@ -13,11 +14,21 @@
 //   note_export  ← S4 planted bug: wildcard sentinel "* / all" bypasses org scope
 //   note_admin_get      ← S5 planted bug: admin-named tool has no role check (role/token-type bypass)
 //   note_create_in_org  ← S6 planted bug: trusts caller-supplied org_id as write target (foreign-parent injection)
+//   note_get_by_query   — S7 planted bug: tenant key omitted from the query filter (unscoped query)
+//   note_share_prepare  — correctly authorized: mints an opaque grant for the caller's own note
+//   note_share_redeem  ← S9 planted bug: serves whatever noteId is inside the decoded grant,
+//     with no re-check against the redeeming session (authz-from-client-round-tripped-value)
 //
-// Each scenario is gated by its own mode flag (modes.s1..s6 = "vuln" | "fixed").
+// Resource inventory:
+//
+//   note://{token}/{orgId}/{noteId}  ← S8 planted bug: scope read from the URI
+//     the caller wrote, instead of the session (resources/read surface)
+//
+// Each scenario is gated by its own mode flag (modes.s1..s9 = "vuln" | "fixed").
 // Scenarios are independent: you can set any combination to "fixed" to isolate one.
 
 import { z } from "zod";
+import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   resolveSession,
   requireOrgAccess,
@@ -60,7 +71,7 @@ const notFound = (id) => {
  * Register every tool on the server.
  * @param {import("@modelcontextprotocol/sdk/server/mcp.js").McpServer} server
  * @param {ReturnType<import("./store.js").createStore>} store
- * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed", s5: "vuln"|"fixed", s6: "vuln"|"fixed" }} modes
+ * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed", s5: "vuln"|"fixed", s6: "vuln"|"fixed", s7: "vuln"|"fixed", s8: "vuln"|"fixed", s9: "vuln"|"fixed" }} modes
  */
 export function registerTools(server, store, modes) {
   // whoami — echoes the server-trusted session (handy to verify token → org mapping).
@@ -376,5 +387,119 @@ export function registerTools(server, store, modes) {
       if (!note) notFound(id);
       return ok(note);
     }),
+  );
+
+  // ── S9: note_share_prepare / note_share_redeem ───────────────────────────
+  // AUTHZ-FROM-CLIENT-ROUND-TRIPPED-VALUE BOLA (CWE-639) — the tool-chaining
+  // surface.
+  //
+  // `note_share_prepare` is correctly authorized: it mints an opaque grant
+  // for a note the CALLER'S OWN session can already access. `note_share_redeem`
+  // decodes the grant and serves whatever `noteId` is inside it — because
+  // "the grant must have come from an authorized tool." The grant is a plain
+  // client-side string between the two calls; nothing stops the caller from
+  // decoding it and editing the id before redeeming.
+  //
+  //   Exploit: Alice calls note_share_prepare for her own note (n_acme_1),
+  //            gets back a base64url grant, decodes it, rewrites the noteId
+  //            field to n_globex_1, re-encodes it, and calls
+  //            note_share_redeem with the tampered grant.
+  //
+  // In an MCP server there is no server-side continuity between two
+  // `tools/call` invocations — every value that crosses that gap travels
+  // through the client, and in an agentic loop through the MODEL'S CONTEXT.
+  // "A prior tool already checked this" is a client-side claim, not a server
+  // fact. Even a SIGNED grant is not enough on its own if the redeeming tool
+  // trusts the signed payload instead of re-checking it against the current
+  // session: the authority has to live in the session, not in the token.
+  server.registerTool(
+    "note_share_prepare",
+    {
+      description:
+        "Prepare an opaque share grant for one of your own notes, redeemable via note_share_redeem.",
+      inputSchema: { token: z.string(), id: z.string() },
+    },
+    guard(async ({ token, id }) => {
+      const session = resolveSession(store, token);
+      const note = store.getNote(id);
+      if (!note) notFound(id);
+      requireOrgAccess(session, note); // correctly authorized — prepare is not the bug
+      const grant = Buffer.from(JSON.stringify({ noteId: note.id })).toString(
+        "base64url",
+      );
+      return ok({ grant });
+    }),
+  );
+
+  server.registerTool(
+    "note_share_redeem",
+    {
+      description: "Redeem an opaque share grant produced by note_share_prepare.",
+      inputSchema: { token: z.string(), grant: z.string() },
+    },
+    guard(async ({ token, grant }) => {
+      const session = resolveSession(store, token);
+      const decoded = JSON.parse(
+        Buffer.from(grant, "base64url").toString("utf8"),
+      );
+      // S9 vuln:  the decoded grant IS the authorization.
+      // S9 fixed: the grant is a hint; the session is re-checked as authority.
+      if (modes.s9 === "vuln") {
+        const note = store.getNote(decoded.noteId);
+        if (!note) notFound(decoded.noteId);
+        return ok(note);
+      }
+      const note = store.getNote(decoded.noteId);
+      if (!note) notFound(decoded.noteId);
+      requireOrgAccess(session, note); // <-- THE FIX
+      return ok(note);
+    }),
+  );
+
+  // ── S8: note://{token}/{orgId}/{noteId} resource ─────────────────────────
+  // RESOURCE-URI-AS-SCOPE BOLA (CWE-639) — the resources/read surface.
+  //
+  // `resources/*` is a separate MCP primitive from `tools/*`: its own
+  // registration API (registerResource + ResourceTemplate), its own handler
+  // signature ((uri, variables) instead of a single args object), and its own
+  // client flow (resources/read, not tools/call). "Read every tool" habits
+  // never look here.
+  //
+  // The URI template turns the tenant into a path segment the CALLER writes.
+  // In vuln mode the handler trusts that segment as the scope; in fixed mode
+  // it is ignored and the session's own org is used instead. Identity still
+  // travels in the URI (`{token}`) — that is deliberate, the same per-call
+  // token model every tool in this lab uses (see src/auth.js) — only the
+  // SCOPE segment is the planted bug.
+  //
+  //   Exploit: Alice (alice-token, org Acme) reads
+  //            note://alice-token/org_globex/n_globex_1 → in vuln mode the
+  //            orgId path segment is trusted and Globex's note is returned.
+  server.registerResource(
+    "note",
+    new ResourceTemplate("note://{token}/{orgId}/{noteId}", {
+      list: undefined,
+    }),
+    {
+      title: "Note",
+      description: "Read a single note as an MCP resource.",
+    },
+    async (uri, { token, orgId, noteId }) => {
+      const session = resolveSession(store, token);
+      // S8 vuln:  scope comes from the URI segment the caller wrote.
+      // S8 fixed: scope comes from the session; the URI segment is ignored.
+      const scope = modes.s8 === "vuln" ? orgId : session.orgId;
+      const note = store.findNoteBy({ id: noteId, orgId: scope });
+      if (!note) notFound(noteId);
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: JSON.stringify(note, null, 2),
+          },
+        ],
+      };
+    },
   );
 }

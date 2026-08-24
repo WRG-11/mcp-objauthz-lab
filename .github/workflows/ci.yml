@@ -77,8 +77,8 @@ jobs:
           node -e '
             const d = JSON.parse(require("fs").readFileSync("/tmp/semgrep-fixtures.json", "utf8"));
             const got = d.results.length;
-            const want = 33; // 20 JavaScript + 13 Python.
-                             //   JS (20): mcp-wildcard-sentinel-scope-bypass
+            const want = 41; // 21 JavaScript + 14 Python + 3 Go + 3 Rust.
+                             //   JS (21): mcp-wildcard-sentinel-scope-bypass
                              //   double-reports its one vuln line (two
                              //   pattern-either branches), and
                              //   mcp-client-supplied-scope-overrides-session has
@@ -90,12 +90,18 @@ jobs:
                              //   mcp-missing-object-authz-check: with no role
                              //   check anywhere, the read path is also
                              //   unauthorized -- two true signals, one handler.
-                             //   Python (13): three shared rules plus five -py
+                             //   S8 adds one (mcp-resource-uri-variable-used-as-scope,
+                             //   resource-uri-variable-used-as-scope.js) -- its
+                             //   fixed build and its no-tenant-segment sibling
+                             //   both stay silent by design (session-derived
+                             //   scope), so one ruleid line, not two.
+                             //   Python (14): three shared rules plus five -py
                              //   siblings (batch, admin-tool, unscoped-query,
-                             //   write-parent, ternary). The wildcard fixture
-                             //   double-report repeats here, and two negative
-                             //   cases (a tokenizer, a glob compare) stay
-                             //   deliberately silent.
+                             //   write-parent, ternary), plus the new S8 -py
+                             //   sibling. The wildcard fixture double-report
+                             //   repeats here, and two negative cases (a
+                             //   tokenizer, a glob compare) stay deliberately
+                             //   silent.
             console.log(`detection rules: ${got} fixture findings (want ${want})`);
             if (got !== want) {
               console.error("Rule set drifted from its own fixtures — see detection/README.md");

@@ -728,3 +728,89 @@ rules:
       confidence: MEDIUM
       references:
         - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+
+  # ── S8: the resources/read surface ─────────────────────────────────────────
+  # `resources/*` is a separate MCP primitive from `tools/*` — its own
+  # registration API, its own handler signature ((uri, variables) instead of a
+  # single args object), its own client-side call (resources/read, not
+  # tools/call). Every rule above targets a tool handler; none of them can see
+  # this shape, because there is no `registerTool(...)` call here to anchor on.
+  #
+  # The bug: a URI template variable is caller-written the same way a tool
+  # argument is, but it is easy to mistake for a server-controlled path
+  # segment because it LOOKS like routing rather than input. Bind the tenant
+  # key straight from a URI variable and any caller who can write the URI
+  # chooses the scope.
+  #
+  # JavaScript/TypeScript only, plus a -py sibling below (FastMCP's decorator
+  # + function-signature shape does not parse as JS and the arrow-function
+  # handler shape does not parse as Python).
+  - id: mcp-resource-uri-variable-used-as-scope
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      An MCP resource read callback resolves an object using a URI template
+      variable as the tenant/scope key. A resources/read URI is written
+      entirely by the caller, the same as a tool argument, but it is easy to
+      mistake for a server-controlled path segment because it looks like
+      routing rather than input — and MCP hosts often gate tool calls behind
+      an approval prompt while treating resource reads as inert. Bind the
+      scope from the session resolved from the URI's identity variable
+      instead. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+    patterns:
+      - pattern-inside: |
+          async ($URI, { ... }) => { ... }
+      - pattern: "$STORE.$METHOD({ ..., $KEY: $VAL, ... })"
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i)^(find|get)([A-Z_].*)?$
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+      # session-derived scope is the correct shape and stays silent — same
+      # $VAL axis as mcp-write-parent-from-client-argument (S6). This is
+      # exactly the axis mcp-unscoped-query-object-fetch (S7) does NOT have:
+      # that rule only checks whether a tenant-shaped key is present in the
+      # filter, not where its value comes from.
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+
+  # S8 in Python. FastMCP resources are a decorated function whose parameters
+  # ARE the URI template variables — there is no destructured args object to
+  # anchor on, so the decorator itself is the signal.
+  - id: mcp-resource-uri-variable-used-as-scope-py
+    languages: [python]
+    severity: WARNING
+    message: >
+      An MCP resource handler (@mcp.resource) resolves an object using a URI
+      template variable as the tenant/scope key. Same defect as
+      mcp-resource-uri-variable-used-as-scope, FastMCP spelling: the template
+      variable arrives as a function parameter instead of a destructured
+      object. CWE-639 — see
+      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+    patterns:
+      - pattern-inside: |
+          @$MCP.resource(...)
+          def $FUNC(...):
+              ...
+      - pattern: "$STORE.$METHOD(..., $KEY = $VAL, ...)"
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+    metadata:
+      cwe: ["CWE-639"]
+      category: security
+      confidence: MEDIUM
+      references:
+        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope

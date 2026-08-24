@@ -8,12 +8,12 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 12
-[Semgrep](https://semgrep.dev) rules covering the shapes from the seven lab
-scenarios. Eight of the twelve run against **Python as well as
-JavaScript/TypeScript**: three shared rules declare both, and five `-py`
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 14
+[Semgrep](https://semgrep.dev) rules covering the shapes from the eight lab
+scenarios. Nine of the fourteen run against **Python as well as
+JavaScript/TypeScript**: three shared rules declare both, and six `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool` callbacks):
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks):
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
@@ -29,9 +29,14 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-admin-named-tool-missing-role-check-py` | S5 (Python) | an `@mcp.tool()`-decorated function named `*admin*` whose body never calls a role check |
 | `mcp-unscoped-query-object-fetch-py` | S7 (Python) | SQLAlchemy spellings of the unscoped fetch: `filter_by(id=...)` with no tenant kwarg, and a primary-key `session.get(Model, pk)`. **WARNING**, same honesty as its JS sibling |
 | `mcp-write-parent-from-client-argument-py` | S6 (Python) | the kwargs spelling of the foreign-parent create/save. **WARNING**, same honesty as its JS sibling |
+| `mcp-resource-uri-variable-used-as-scope` | S8 | an MCP resource read callback (`resources/read`, not `tools/call`) binds a tenant/scope key straight from a URI template variable instead of the session |
+| `mcp-resource-uri-variable-used-as-scope-py` | S8 (Python) | the FastMCP `@mcp.resource(...)`-decorated spelling: the template variable is a function parameter, not a destructured object |
 | `mcp-missing-object-authz-check-go` | S1 (Go) | object resolved by `$STORE.$GETMETHOD($ID)`, mutated with no `Require*Access`/`Check*Access`/`Assert*Owner` call (exported and unexported spelling) in between |
 | `mcp-client-supplied-scope-overrides-session-go` | S2 (Go) | Go's zero-value-fallback spelling of the override (`scope := args.OrgID; if scope == "" { scope = session.OrgID }`) — Go has no `||`/`??`/ternary, so the JS/PY override shape doesn't port directly |
 | `mcp-unscoped-query-object-fetch-go` | S7 (Go) | the struct/ORM primary-key lookup idiom, `$DB.First(&$X, $ID)`, with no tenant key bound into the same query. **WARNING**, same honesty as its JS/PY siblings — and a narrower one: a raw-SQL-string lookup is a Go-specific blind spot this rule does not cover (see below) |
+| `mcp-missing-object-authz-check-rust` | S1 (Rust) | `let`-bound fetch/mutate sequence (`let obj = store.get(&id); ... store.delete(&obj.id)`) with no `require_*`/`check_*`/`assert_*` call in between (snake_case guard names) |
+| `mcp-client-supplied-scope-overrides-session-rust` | S2 (Rust) | a client-destructured scope field (`org_id` from `Parameters<T>`) reaching the store call in place of the session's own; the anchored name regex leaves a `session.org_id` field access silent |
+| `mcp-admin-named-tool-missing-role-check-rust` | S5 (Rust) | an admin-named `#[tool]` async fn whose body never calls `require_admin_role`/`check_admin_role`/`assert_admin_role` — naming is documentation, not enforcement |
 
 ### Go pack
 
@@ -50,6 +55,21 @@ itself — Go's most common unscoped-fetch shape is a raw SQL string
 inside a string literal isn't something Semgrep can reliably see. The rule
 locks onto the statically matchable struct/ORM idiom (`db.First(&x, id)`)
 instead of guessing at string contents.
+
+### Rust pack
+
+[`semgrep/mcp-object-authz-rust.yml`](semgrep/mcp-object-authz-rust.yml) covers
+Rust MCP servers built on the [`rmcp`](https://github.com/modelcontextprotocol/rust-sdk)
+crate, in its own file for the same reason as the Go pack. Semgrep's Rust
+support was verified to parse the real `rmcp` handler idiom
+(`Parameters(T { .. }): Parameters<T>` destructuring on a `#[tool_router]`
+impl) with zero parse errors before the rules were written.
+
+Three scenarios are covered (S1, S2, S5). The rules are pattern-based, matching
+the house style (no existing rule uses `mode: taint`); the S2 rule keys on the
+scope field's *name*, so a session-derived local that is renamed to `org_id`
+is a documented, deliberate limitation rather than a miss — taint mode resolves
+it and was verified to do so, but is kept out to match the existing rules.
 
 ## Run it
 
@@ -82,15 +102,29 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **12/12 rules fire
+minimal vulnerable snippet and one fixed snippet per rule. **14/14 rules fire
 on the vulnerable snippet and stay silent on the fixed one.** This is the
 correctness bar every rule was iterated against.
 
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **5 of 7 scenarios flagged (S2, S3, S4, S6, S7). S1 and S5
-are missed.**
+ruleset against it: **7 of 9 scenarios flagged (S2, S3, S4, S6, S7, S8, S9).
+S1 and S5 are missed.**
+
+S9 has no dedicated rule. Measured before deciding that: `mcp-missing-
+object-authz-check` (S1's rule) already fires on `note_share_redeem`'s vuln
+branch, because the handler happens to carry the exact shape that rule
+targets — `$SESSION = resolveSession(...); ...; $OBJ = store.getNote($ID);
+...; return ok($OBJ);` with no guard call in between. A probe file (three
+functions: the vuln shape with a local assignment, the fixed shape, and an
+inline assignment-free spelling of the vuln shape) confirmed it fires on the
+first and stays silent on the other two. That last case is the caveat worth
+keeping: the rule catches `const note = store.getNote(id); ...; return
+ok(note)`, but **not** the same defect spelled inline as
+`return ok(store.getNote(id))` with no local variable — `mcp-missing-object-
+authz-check` was never anchored on an assignment by design, it just happens
+that both S1 and S9's tools.js code write it that way.
 
 Why S1/S5 are missed *there* — and why that says nothing about the rules on
 real code. Both rules work by checking that no authorization call *textually
