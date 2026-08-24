@@ -29,6 +29,27 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-admin-named-tool-missing-role-check-py` | S5 (Python) | an `@mcp.tool()`-decorated function named `*admin*` whose body never calls a role check |
 | `mcp-unscoped-query-object-fetch-py` | S7 (Python) | SQLAlchemy spellings of the unscoped fetch: `filter_by(id=...)` with no tenant kwarg, and a primary-key `session.get(Model, pk)`. **WARNING**, same honesty as its JS sibling |
 | `mcp-write-parent-from-client-argument-py` | S6 (Python) | the kwargs spelling of the foreign-parent create/save. **WARNING**, same honesty as its JS sibling |
+| `mcp-missing-object-authz-check-go` | S1 (Go) | object resolved by `$STORE.$GETMETHOD($ID)`, mutated with no `Require*Access`/`Check*Access`/`Assert*Owner` call (exported and unexported spelling) in between |
+| `mcp-client-supplied-scope-overrides-session-go` | S2 (Go) | Go's zero-value-fallback spelling of the override (`scope := args.OrgID; if scope == "" { scope = session.OrgID }`) — Go has no `||`/`??`/ternary, so the JS/PY override shape doesn't port directly |
+| `mcp-unscoped-query-object-fetch-go` | S7 (Go) | the struct/ORM primary-key lookup idiom, `$DB.First(&$X, $ID)`, with no tenant key bound into the same query. **WARNING**, same honesty as its JS/PY siblings — and a narrower one: a raw-SQL-string lookup is a Go-specific blind spot this rule does not cover (see below) |
+
+### Go pack
+
+[`semgrep/mcp-object-authz-go.yml`](semgrep/mcp-object-authz-go.yml) covers
+Go MCP servers built on
+[`modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk),
+in its own file — same reason the Python siblings are separate rules rather
+than patterns bolted onto the shared ones: Go's syntax (no `||`/ternary,
+PascalCase/camelCase casing, `:=` short declarations) doesn't parse as
+JavaScript or Python, and a rule with an unparseable pattern silently stops
+matching in *every* language it declares.
+
+Three of the seven scenarios are covered (S1, S2, S7); the honest gap is S7
+itself — Go's most common unscoped-fetch shape is a raw SQL string
+(`db.QueryRow("SELECT ... WHERE id = $1", id)`), and a tenant key's absence
+inside a string literal isn't something Semgrep can reliably see. The rule
+locks onto the statically matchable struct/ORM idiom (`db.First(&x, id)`)
+instead of guessing at string contents.
 
 ## Run it
 

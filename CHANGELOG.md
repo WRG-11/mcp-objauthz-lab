@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Go language pack: three `-go` rules covering S1, S2, and S7 for MCP
+  servers built on `modelcontextprotocol/go-sdk`, in their own file
+  (`detection/semgrep/mcp-object-authz-go.yml`) since Go's syntax (no
+  `||`/ternary, PascalCase/camelCase casing) can't parse as JavaScript or
+  Python.
+  - `mcp-missing-object-authz-check-go` (S1) — the guard-call exemption
+    list carries both exported and unexported spelling of each guard name.
+  - `mcp-client-supplied-scope-overrides-session-go` (S2) — Go's zero-value
+    fallback idiom, the language's spelling of the override this rule's
+    JS/PY siblings catch via `||`/ternary.
+  - `mcp-unscoped-query-object-fetch-go` (S7) — the struct/ORM primary-key
+    lookup idiom (`db.First(&x, id)`). WARNING, same honesty as its
+    siblings, and an explicit gap: a raw-SQL-string lookup is not covered
+    (see `detection/README.md`).
+
 ## [3.5.0] — 2026-08-23
 
 ### Added
