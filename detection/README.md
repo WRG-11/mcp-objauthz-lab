@@ -55,7 +55,7 @@ instead of guessing at string contents.
 
 ```bash
 pip install semgrep
-semgrep --config detection/semgrep/mcp-object-authz.yml <path-to-your-mcp-server>
+semgrep --config detection/semgrep/ <path-to-your-mcp-server>
 ```
 
 Or as a GitHub Action, no local install needed — add this step to your own

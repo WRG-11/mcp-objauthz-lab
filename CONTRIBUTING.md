@@ -84,11 +84,11 @@ npm test                                        # the lab's own unit tests
 npm run poc                                     # the exploit walkthroughs
 
 pip install semgrep
-semgrep --config detection/semgrep/mcp-object-authz.yml \
+semgrep --config detection/semgrep/ \
         detection/semgrep/fixtures/ --no-git-ignore --quiet --json \
         --output=/tmp/fixtures.json             # count must match ci.yml
 
-semgrep --config detection/semgrep/mcp-object-authz.yml src/
+semgrep --config detection/semgrep/ src/
 ```
 
 The last one is the dogfood check: the rules must keep finding the planted

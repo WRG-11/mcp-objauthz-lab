@@ -34,7 +34,7 @@ runs:
     - name: Run MCP object-authz scan (SARIF)
       shell: bash
       run: |
-        semgrep --config "${{ github.action_path }}/detection/semgrep/mcp-object-authz.yml" \
+        semgrep --config "${{ github.action_path }}/detection/semgrep/" \
           "${{ inputs.path }}" --no-git-ignore --sarif \
           --output=mcp-objauthz-results.sarif
 

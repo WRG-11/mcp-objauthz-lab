@@ -66,7 +66,7 @@ jobs:
         run: pip install --quiet semgrep
       - name: scan fixtures, assert exact expected finding count
         run: |
-          semgrep --config detection/semgrep/mcp-object-authz.yml \
+          semgrep --config detection/semgrep/ \
             detection/semgrep/fixtures/ --no-git-ignore --quiet --json \
             --output=/tmp/semgrep-fixtures.json
           # NOTE: everything below is inside a single-quoted shell string.
