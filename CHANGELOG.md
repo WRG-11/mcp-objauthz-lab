@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.1] — 2026-08-25
+
+### Fixed
+
+- **`mcp-ratelimit-scope-from-forwarded-header` (+ `-py`) now fires on real-capture fixtures.** The S11 rule's `pattern-either` structure was tuned to match the actual SurfSense audit pattern: optional-chained header access (`extra?.requestInfo?.headers?.["x-forwarded-for"]`) with nullish coalescing (`?? session.userId`) assigned to a variable, then used in quota/rate-limit store calls (`store.getQuotaCount(quotaKey)`, `store.isRateLimited(rateLimitKey)`). Block patterns matching the function body now correctly bind the header variable across assignment and use sites. Two-way canary verified:
+  - FIRE: `xff-for-ratelimit.js` — all three quota/rate-limit vulnerability cases match (3 findings)
+  - SILENT: `xff-for-logging.js` — XFF read for logging only produces zero findings
+- CI fixture count updated: 39 → 42 (3 new S11 JS findings)
+
 ## [3.8.0] — 2026-08-24
 
 ### Added

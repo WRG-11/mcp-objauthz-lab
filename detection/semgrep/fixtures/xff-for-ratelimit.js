@@ -17,6 +17,17 @@ async function createNoteWithQuotaVuln({ token, title, body }, extra) {
   return store.createNote({ orgId: session.orgId, ownerId: session.userId, title, body });
 }
 
+// VULN: X-Forwarded-For used as quota key WITHOUT optional chaining (for rule testing)
+async function createNoteWithQuotaVulnNoOptChain({ token, title, body }, extra) {
+  const session = resolveSession(store, token);
+  // ruleid: mcp-ratelimit-scope-from-forwarded-header
+  const quotaKey = extra.requestInfo.headers["x-forwarded-for"] ?? session.userId;
+  const count = store.getQuotaCount(quotaKey);
+  if (count >= 10) throw new Error("Quota exceeded");
+  store.incrementQuota(quotaKey);
+  return store.createNote({ orgId: session.orgId, ownerId: session.userId, title, body });
+}
+
 // VULN: X-Real-IP used as rate-limit key (same pattern)
 async function apiCallWithRateLimitVuln({ token }, extra) {
   const session = resolveSession(store, token);
