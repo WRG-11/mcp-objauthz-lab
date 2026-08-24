@@ -8,12 +8,12 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 12
-[Semgrep](https://semgrep.dev) rules covering the shapes from the seven lab
-scenarios. Eight of the twelve run against **Python as well as
-JavaScript/TypeScript**: three shared rules declare both, and five `-py`
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 14
+[Semgrep](https://semgrep.dev) rules covering the shapes from the eight lab
+scenarios. Nine of the fourteen run against **Python as well as
+JavaScript/TypeScript**: three shared rules declare both, and six `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool` callbacks):
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks):
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
@@ -29,6 +29,8 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-admin-named-tool-missing-role-check-py` | S5 (Python) | an `@mcp.tool()`-decorated function named `*admin*` whose body never calls a role check |
 | `mcp-unscoped-query-object-fetch-py` | S7 (Python) | SQLAlchemy spellings of the unscoped fetch: `filter_by(id=...)` with no tenant kwarg, and a primary-key `session.get(Model, pk)`. **WARNING**, same honesty as its JS sibling |
 | `mcp-write-parent-from-client-argument-py` | S6 (Python) | the kwargs spelling of the foreign-parent create/save. **WARNING**, same honesty as its JS sibling |
+| `mcp-resource-uri-variable-used-as-scope` | S8 | an MCP resource read callback (`resources/read`, not `tools/call`) binds a tenant/scope key straight from a URI template variable instead of the session |
+| `mcp-resource-uri-variable-used-as-scope-py` | S8 (Python) | the FastMCP `@mcp.resource(...)`-decorated spelling: the template variable is a function parameter, not a destructured object |
 
 ## Run it
 
@@ -61,15 +63,15 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **12/12 rules fire
+minimal vulnerable snippet and one fixed snippet per rule. **14/14 rules fire
 on the vulnerable snippet and stay silent on the fixed one.** This is the
 correctness bar every rule was iterated against.
 
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **5 of 7 scenarios flagged (S2, S3, S4, S6, S7). S1 and S5
-are missed.**
+ruleset against it: **6 of 8 scenarios flagged (S2, S3, S4, S6, S7, S8). S1
+and S5 are missed.**
 
 Why S1/S5 are missed *there* — and why that says nothing about the rules on
 real code. Both rules work by checking that no authorization call *textually
