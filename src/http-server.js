@@ -1,21 +1,25 @@
-// Streamable-HTTP entry point for the lab — the transport S10 needs.
+// Streamable-HTTP entry point for the lab — the transport S10 and S11 need.
 //
-// `server.js` (stdio) is the default for local use. This variant runs the SAME
-// tools and store over the MCP streamable-HTTP transport, so a tool call
-// carries the underlying HTTP request's headers in `extra.requestInfo.headers`.
-// That is the surface S10 (note_get_scoped, forwarded-header-as-scope) needs;
-// over stdio there is no requestInfo and S10 silently falls back to the session.
-//
-// Run:  node src/http-server.js            (PORT defaults to 3010)
-// Toggle S10 (or any scenario) the same way as the stdio server: LAB_S10=fixed.
-//
-// This is a deliberately minimal, single-session server for the lab/PoC — it is
-// NOT a production HTTP-MCP deployment (no auth on the endpoint, one shared
-// session). The teaching content is the header-trust bug inside the tool, not
-// the HTTP plumbing around it.
+ // `server.js` (stdio) is the default for local use. This variant runs the SAME
+ // tools and store over the MCP streamable-HTTP transport, so a tool call
+ // carries the underlying HTTP request's headers in `extra.requestInfo.headers`.
+ // That is the surface S10 (note_get_scoped, forwarded-header-as-scope) and
+ // S11 (note_create_limited, XFF quota bypass) need; over stdio there is no
+ // requestInfo and both silently fall back to the session.
+ //
+ // Run:  node src/http-server.js            (PORT defaults to 3010)
+ // Toggle S10/S11 (or any scenario) the same way as the stdio server: LAB_S10=fixed LAB_S11=fixed.
+ //
+ // This is a deliberately minimal, single-session server for the lab/PoC — it is
+ // NOT a production HTTP-MCP deployment (no auth on the endpoint, one shared
+ // session). The teaching content is the header-trust bug inside the tool, not
+ // the HTTP plumbing around it.
 
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createStore } from "./store.js";
@@ -34,9 +38,15 @@ const modes = {
   s8: fixed(process.env.LAB_S8) ? "fixed" : "vuln",
   s9: fixed(process.env.LAB_S9) ? "fixed" : "vuln",
   s10: fixed(process.env.LAB_S10) ? "fixed" : "vuln",
+  s11: fixed(process.env.LAB_S11) ? "fixed" : "vuln",
 };
 
-const server = new McpServer({ name: "mcp-objauthz-lab", version: "3.7.0" });
+const HERE = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(
+  readFileSync(join(HERE, "..", "package.json"), "utf8"),
+);
+
+const server = new McpServer({ name: "mcp-objauthz-lab", version });
 const store = createStore();
 registerTools(server, store, modes);
 
@@ -66,6 +76,6 @@ const httpServer = createServer(async (req, res) => {
 const port = Number(process.env.PORT ?? 3010);
 httpServer.listen(port, () => {
   console.error(
-    `[mcp-objauthz-lab:http] up on :${port}  S10=${modes.s10}  (S1..S9 default vuln unless LAB_S* set)`,
+    `[mcp-objauthz-lab:http] up on :${port}  S10=${modes.s10}  S11=${modes.s11}  (S1..S9 default vuln unless LAB_S* set)`,
   );
 });

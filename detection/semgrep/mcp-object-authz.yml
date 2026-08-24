@@ -1,876 +1,789 @@
 rules:
-  - id: mcp-missing-object-authz-check
-    languages: [javascript, typescript, python]
-    severity: ERROR
-    message: >
-      An object resolved from storage by a client-supplied id reaches a
-      mutation or response without an authorization/ownership check in
-      between. This is the MCP object-level authorization pattern
-      (BOLA/IDOR, CWE-639/862) — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original
-    #
-    # The read branch below existed on paper for the rule's whole life and had
-    # never fired on anything. `patterns` is an AND, and the $MUTMETHOD regex
-    # sat at the top level where it applies to BOTH branches: when
-    # pattern-either took the read branch, $MUTMETHOD was never bound, an
-    # unbound metavariable fails its own constraint, and the match died.
-    # Measured 2026-08-23: `resolve -> get -> return ok(obj)` returned ZERO
-    # findings in every spelling tried -- a pure cross-tenant READ went
-    # unseen even though it is the same defect as the mutation. The branches
-    # are now scoped blocks that each carry only their own constraints, with
-    # fixture pairs pinning both halves: the caught read and the guarded read.
-    #
-    # Deliberately still `return ok(...)`, not bare `return $OBJ`: a response-
-    # wrapped object is the tool-handler shape this ruleset targets; matching
-    # every bare return would flag ordinary getters and get the rule disabled.
-    patterns:
-      - pattern-either:
-          - patterns:
-              - pattern: |
-                  $OBJ = $STORE.$GETMETHOD($ID);
-                  ...
-                  $STORE.$MUTMETHOD($OBJ.$FIELD);
-              - metavariable-regex:
-                  metavariable: $MUTMETHOD
-                  regex: "(?i)^(delete|update).*"
-          - patterns:
-              # Anchored at the session-resolution line on purpose. A bare
-              # `get -> return ok(obj)` span cannot see a role check that
-              # sits BEFORE the fetch (pattern-not only matches inside the
-              # positive span -- measured), so the span starts where real
-              # tool handlers start. $RESOLVE is deliberately unconstrained:
-              # naming the resolver would be a guess about the next
-              # codebase's vocabulary, the exact failure mode
-              # CVE-2026-9135 taught this ruleset. Cost, stated honestly: a
-              # pure helper that fetches and returns with no session call
-              # before it is not matched by THIS branch (the mutation branch
-              # still is).
-              - pattern: |
-                  $SESSION = $RESOLVE(...);
-                  ...
-                  $OBJ = $STORE.$GETMETHOD($ID);
-                  ...
-                  return ok($OBJ);
-      - metavariable-regex:
-          metavariable: $GETMETHOD
-          regex: "(?i)^(get|find).*"
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          requireOrgAccess(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          require_org_access(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          requireOwnership(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          require_ownership(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          requireAccess(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          require_access(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          checkAccess(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          check_access(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          checkOwnership(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          check_ownership(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          assertOwner(...);
-          ...
-      - pattern-not: |
-          $OBJ = $STORE.$GETMETHOD($ID);
-          ...
-          assert_owner(...);
-          ...
-      # The read branch below is anchored at the session-resolution line, and
-      # its exclusions must be anchored there too -- measured, a negative whose
-      # first statement differs from the positive match's first statement
-      # never engages (this is what makes the assignment-anchored ownership
-      # list above work against the mutation branch yet not against the read
-      # branch), and a $GUARD metavariable constrained by metavariable-regex
-      # inside pattern-not silently never matches either (also measured -- so
-      # this list is enumerated, one name per block, same policy as S6's rule:
-      # a new guard name is a data edit here, not prose). Role checks are on
-      # the list because an admin cross-org lookup authorizes by ROLE, not
-      # ownership -- demanding an ownership call there would flag every
-      # correctly-built admin tool once the read branch went live (measured:
-      # it did exactly that).
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          requireOrgAccess(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          require_org_access(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          requireOwnership(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          require_ownership(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          requireAccess(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          require_access(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          checkAccess(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          check_access(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          checkOwnership(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          check_ownership(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          assertOwner(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          assert_owner(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          requireAdminRole(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          require_admin_role(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          checkAdminRole(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          check_admin_role(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          assertAdminRole(...);
-          ...
-      - pattern-not: |
-          $SESSION = $RESOLVE(...);
-          ...
-          assert_admin_role(...);
-          ...
-    metadata:
-      cwe: ["CWE-639", "CWE-862"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-missing-object-authz-check
+  languages:
+  - javascript
+  - typescript
+  - python
+  severity: ERROR
+  message: "An object resolved from storage by a client-supplied id reaches a mutation or response without an authorization/ownership check in between. This is the MCP object-level authorization pattern\
+    \ (BOLA/IDOR, CWE-639/862) \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original\n"
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: '$OBJ = $STORE.$GETMETHOD($ID);
 
-  - id: mcp-client-supplied-scope-overrides-session
-    languages: [javascript, typescript, python]
-    severity: ERROR
-    message: >
-      A client-supplied scope or identity argument can override the
-      server-trusted session scope. Arguments like org_id/tenant_id/
-      project_id/user_id must never select whose data a tool operates on —
-      always use the session's own scope and ignore (or reject) the
-      caller-supplied value. CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
-    patterns:
-      - pattern-either:
-          - pattern: "$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD"
-          - pattern: "$SCOPEPARAM || $SESSION.$FIELD"
-          - pattern: "$SCOPEPARAM ?? $SESSION.$FIELD"
-      # user_id/owner_id are the per-USER spelling of the same bug: a caller
-      # naming whose row to touch. They were missing until CVE-2026-9135 (IBM
-      # Langflow) turned up as the first public CVE of this class and used
-      # exactly that spelling -- see detection/README.md. `(?i)` covers the
-      # camelCase forms, so `userId` matches `userid`.
-      - metavariable-regex:
-          metavariable: $SCOPEPARAM
-          regex: "(?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid)$"
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
+          ...
 
-  - id: mcp-wildcard-sentinel-scope-bypass
-    languages: [javascript, typescript, python]
-    severity: ERROR
-    message: >
-      A magic "all"/"*" sentinel value on a scope parameter is honored
-      without a role check, letting any caller (not just admins) dump every
-      tenant's data in one call. Gate wildcard scope on an explicit
-      requireAdminRole()-style check, not on the parameter's literal value.
-      CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
-    patterns:
-      - pattern-either:
-          - pattern: '$PARAM === "*"'
-          - pattern: '$PARAM === "all"'
-          - pattern: '$PARAM == "*"'
-          - pattern: '$PARAM == "all"'
-      - metavariable-regex:
-          # `==` is JavaScript's secondary equality operator but Python's ONLY
-          # one, so without this filter the rule matches any literal "*"
-          # comparison. Measured on a real 215-file Python MCP server: two
-          # findings, both a tokenizer doing `ch == "*"`, both false. These are
-          # the identifiers the message above already names; both JavaScript
-          # call sites in this lab use `org_id`, so JS coverage is unchanged.
-          metavariable: $PARAM
-          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-      - pattern-not-inside: |
-          requireAdminRole(...);
-          ...
-      - pattern-not-inside: |
-          require_admin_role(...);
-          ...
-      - pattern-not-inside: |
-          checkAdminRole(...);
-          ...
-      - pattern-not-inside: |
-          check_admin_role(...);
-          ...
-      - pattern-not-inside: |
-          assertAdminRole(...);
-          ...
-      - pattern-not-inside: |
-          assert_admin_role(...);
-          ...
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: LOW
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
+          $STORE.$MUTMETHOD($OBJ.$FIELD);
 
-  - id: mcp-batch-resolve-missing-per-item-scope-filter
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: >
-      Multiple objects are resolved by client-supplied ids in a batch, but
-      the surrounding code has no per-item scope filter (e.g. a
-      ".filter(n => n.orgId === session.orgId)" afterward). A sibling
-      list() tool is often correctly scoped while its batch-get sibling
-      skips the per-object check — the "list->get asymmetry" pattern.
-      CWE-862 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
-    patterns:
-      - pattern: "$IDS.map($F => $STORE.$METHOD($F))"
+          '
+      - metavariable-regex:
+          metavariable: $MUTMETHOD
+          regex: (?i)^(delete|update).*
+    - patterns:
+      - pattern: '$SESSION = $RESOLVE(...);
+
+          ...
+
+          $OBJ = $STORE.$GETMETHOD($ID);
+
+          ...
+
+          return ok($OBJ);
+
+          '
+  - metavariable-regex:
+      metavariable: $GETMETHOD
+      regex: (?i)^(get|find).*
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      requireOrgAccess(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      require_org_access(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      requireOwnership(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      require_ownership(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      requireAccess(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      require_access(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      checkAccess(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      check_access(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      checkOwnership(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      check_ownership(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      assertOwner(...);
+
+      ...
+
+      '
+  - pattern-not: '$OBJ = $STORE.$GETMETHOD($ID);
+
+      ...
+
+      assert_owner(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      requireOrgAccess(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      require_org_access(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      requireOwnership(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      require_ownership(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      requireAccess(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      require_access(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      checkAccess(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      check_access(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      checkOwnership(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      check_ownership(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      assertOwner(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      assert_owner(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      requireAdminRole(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      require_admin_role(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      checkAdminRole(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      check_admin_role(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      assertAdminRole(...);
+
+      ...
+
+      '
+  - pattern-not: '$SESSION = $RESOLVE(...);
+
+      ...
+
+      assert_admin_role(...);
+
+      ...
+
+      '
+  metadata:
+    cwe:
+    - CWE-639
+    - CWE-862
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-client-supplied-scope-overrides-session
+  languages:
+  - javascript
+  - typescript
+  - python
+  severity: ERROR
+  message: "A client-supplied scope or identity argument can override the server-trusted session scope. Arguments like org_id/tenant_id/ project_id/user_id must never select whose data a tool operates on\
+    \ \xE2\u20AC\u201D always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param\n"
+  patterns:
+  - pattern-either:
+    - pattern: '$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD'
+    - pattern: $SCOPEPARAM || $SESSION.$FIELD
+    - pattern: $SCOPEPARAM ?? $SESSION.$FIELD
+  - metavariable-regex:
+      metavariable: $SCOPEPARAM
+      regex: (?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid)$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-wildcard-sentinel-scope-bypass
+  languages:
+  - javascript
+  - typescript
+  - python
+  severity: ERROR
+  message: A magic "all"/*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*"
+    or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's
+    literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  patterns:
+  - pattern-either:
+    - pattern: $PARAM === "*"
+    - pattern: $PARAM === "all"
+    - pattern: $PARAM == "*"
+    - pattern: $PARAM == "all"
+  - metavariable-regex:
+      metavariable: $PARAM
+      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+  - pattern-either:
+    - patterns:
+      - pattern: if ($PARAM === "*") { ... }
+      - pattern-either:
+        - pattern: $STORE.$METHOD()
+        - pattern: return $STORE.$METHOD()
       - metavariable-regex:
           metavariable: $METHOD
-          regex: "(?i)^(get|find).*"
-      # Measured against the official @modelcontextprotocol/sdk (344 files,
-      # dist included): one finding, `relatedIds.map(id =>
-      # this._requestResponseMap.get(id))` -- an in-memory response-map
-      # lookup, not a storage resolve. Receivers that end in a container-ish
-      # suffix are excluded; everything else, including `this.store`-shaped
-      # receivers, still matches. Same policy as the wildcard rule's filter:
-      # a narrow, measured exclusion beats a known false positive.
-      - metavariable-regex:
-          metavariable: $STORE
-          regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
-      - pattern-not-inside: |
-          $RESOLVED = $IDS.map($F => $STORE.$METHOD($F));
-          ...
-          $RESOLVED.filter(...);
-    metadata:
-      cwe: ["CWE-862"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
-
-  - id: mcp-admin-named-tool-missing-role-check
-    languages: [javascript, typescript]
-    severity: ERROR
-    message: >
-      A tool registered with an admin-sounding name never calls a
-      role-check function in its handler. Naming a tool "admin_*" /
-      "*_admin_*" is documentation, not enforcement — any valid token can
-      reach it unless the handler actually verifies the caller's role.
-      CWE-863 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass
-    patterns:
-      - pattern: "server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => { ... }))"
-      - metavariable-regex:
-          # $NAME captures a quoted string literal (e.g. "note_admin_get"),
-          # so the regex must not anchor to the leading character.
-          metavariable: $NAME
-          regex: "(?i).*admin.*"
-      - pattern-not-inside: |
-          server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {
-            ...
-            requireAdminRole(...);
-            ...
-          }));
-      - pattern-not-inside: |
-          server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {
-            ...
-            checkAdminRole(...);
-            ...
-          }));
-      - pattern-not-inside: |
-          server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {
-            ...
-            assertAdminRole(...);
-            ...
-          }));
-    metadata:
-      cwe: ["CWE-863"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
-
-  - id: mcp-client-supplied-scope-overrides-session-py-ternary
-    languages: [python]
-    severity: ERROR
-    message: >
-      A client-supplied scope or identity argument can override the
-      server-trusted session scope. Arguments like
-      org_id/tenant_id/project_id/user_id must never select whose data a tool
-      operates on — always use the session's own scope and ignore (or reject)
-      the caller-supplied value. CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param
-    #
-    # Why this is a SEPARATE rule and not another pattern on the shared one:
-    # a multi-language Semgrep rule requires every pattern to parse in every
-    # declared language, and `x if x else y` is not valid JavaScript. Adding it
-    # to the shared rule made the whole rule invalid -- and the scan still
-    # exited 0 while silently losing six findings across both languages. A
-    # partial break becomes total silence.
-    #
-    # The `or` spelling normalises to `||` and is already covered by
-    # mcp-client-supplied-scope-overrides-session. This is the other idiomatic
-    # Python form of the same defect.
-    patterns:
+          regex: (?i)^(listAll|all|getAll|findAll|selectAll).*
+    - patterns:
+      - pattern: if ($PARAM === "*") { ... }
       - pattern-either:
-          - pattern: "$SCOPEPARAM if $SCOPEPARAM else $SESSION.$FIELD"
-          - pattern: "$SCOPEPARAM if $SCOPEPARAM is not None else $SESSION.$FIELD"
-      - metavariable-regex:
-          metavariable: $SCOPEPARAM
-          regex: (?i)^(org|tenant|project|team|workspace|account|user|owner|group|realm|namespace)_?id$
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
-
-  - id: mcp-unscoped-query-object-fetch
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: >
-      An object is fetched by id through a query filter that carries no tenant
-      key (workspaceId / projectId / organizationId / orgId / tenantId /
-      accountId / userId / ownerId). If the entity is multi-tenant, the query
-      matches on id alone and any caller's id resolves regardless of tenant --
-      the query-scoped form of object-level authorization failure (BOLA / IDOR,
-      CWE-639). This is the shape CVE-2026-54052 (n8n, CVSS 9.6) took: a table
-      fetched by a sequential id with the tenant column left out of the WHERE.
-      Bind the tenant key into the same filter, sourced from the session, e.g.
-      findOneBy({ id, workspaceId }). A guard-call detector never sees this,
-      because there is no guard call to be missing -- the authorization is the
-      tenant key inside the filter. Confirm the entity is genuinely
-      tenant-scoped before treating this as a bug (a globally-owned table is a
-      true negative).
-    #
-    # Deliberately WARNING, not ERROR: unlike the other rules, this one cannot
-    # prove the entity is tenant-scoped from a single call -- a genuinely global
-    # table fetched by id is a true negative, and only cross-call context (does
-    # this entity carry a tenant column elsewhere? does a caller re-check?) can
-    # tell the two apart. So it flags the SHAPE and asks for a manual read
-    # rather than asserting a bug. Measured review rate is real: against four
-    # audited-clean production servers it raised 0 (activepieces, directus) and
-    # a handful each (flowise, n8n) that all resolved to safe on reading. The
-    # fixtures pin both halves: the tenant-key-bound form stays silent.
-    patterns:
-      - pattern-either:
-          - pattern: "$REPO.findOneBy($FILTER)"
-          - pattern: "$REPO.findNoteBy($FILTER)"
-          - pattern: "$REPO.findOne({ where: $FILTER })"
-          - pattern: "$REPO.delete($FILTER)"
-          - pattern: "$REPO.softDelete($FILTER)"
-      - metavariable-pattern:
-          metavariable: $FILTER
-          pattern: "{ id: $ID }"
-      # exclude when the filter also carries a tenant-shaped key (scope bound)
-      - pattern-not:
-          patterns:
-            - pattern-either:
-                - pattern: "$REPO.$M({ ..., $KEY: $V })"
-                - pattern: "$REPO.findOne({ where: { ..., $KEY: $V } })"
-            - metavariable-regex:
-                metavariable: $KEY
-                regex: (?i)^(workspaceId|projectId|organizationId|orgId|tenantId|accountId|userId|ownerId|teamId|realmId|namespaceId)$
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: LOW
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
-
-  # ── S6: the write side ────────────────────────────────────────────────────
-  # Every rule above guards a READ. This one guards a WRITE, and the asymmetry
-  # is the point: a caller who cannot read another tenant's data may still be
-  # able to CREATE data inside it, because the destination is taken from an
-  # argument instead of the session.
-  #
-  # Why this rule exists at all. The lab's own S6 already showed up in scans,
-  # so the scenario looked covered. It was not. What matched was the lab's
-  # vuln/fixed toggle -- `modes.s6 === "vuln" && org_id ? org_id :
-  # session.orgId` -- which the S2 ternary pattern happens to fit and which no
-  # production server would ever write. Measured 2026-08-23 against four
-  # real-world spellings of the same bug (bare argument, argument via a local,
-  # args.workspaceId, ORM save binding tenantId): the full seven-rule set
-  # returned ZERO. The visible coverage was scaffolding.
-  #
-  # Severity is WARNING, not ERROR, and deliberately so. When the parent key is
-  # bound straight from an argument this is a true positive; when it is bound
-  # from a local variable, that variable's origin decides, and one call site
-  # cannot show it. The rule flags the shape for a reader rather than asserting
-  # the bug -- the same honesty S7's rule carries.
-  #
-  # JavaScript/TypeScript only. The object-literal pattern below does not parse
-  # as Python, and a rule that fails to parse in one declared language
-  # invalidates the whole rule while the scan still exits 0.
-  - id: mcp-write-parent-from-client-argument
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: >
-      A create/save call takes its parent or tenant key from a caller-supplied
-      argument rather than the authenticated session. A caller can then plant
-      an object inside a tenant they do not belong to (foreign-parent
-      injection) even when every read path is correctly scoped. Bind the parent
-      to the session's own scope, or verify membership of the supplied value
-      before writing. CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
-    patterns:
-      - pattern: "$STORE.$METHOD({ ..., $KEY: $VAL, ... })"
-      - metavariable-regex:
-          metavariable: $METHOD
-          regex: (?i)^(create|insert|add|save|put|write|new)([A-Z_].*)?$
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
-      # session-derived destinations are the correct shape and stay silent
-      - metavariable-regex:
-          metavariable: $VAL
-          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
-      # a membership check on the supplied value makes the argument legitimate;
-      # the guard list lives here rather than in prose so a new guard name is a
-      # data edit, not a code change
-      - pattern-not-inside:
-          patterns:
-            - pattern: |
-                $CHECK(...);
-                ...
-                $STORE.$METHOD({ ..., $KEY: $VAL, ... })
-            - metavariable-regex:
-                metavariable: $CHECK
-                regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)[A-Z_].*$
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
-
-  # ── Python ports ────────────────────────────────────────────────────────────
-  # Four shapes were previously JavaScript/TypeScript-only. Each ships as its
-  # own `-py` sibling instead of extra patterns on the shared rule, for the
-  # same reason as -py-ternary above: a multi-language rule requires every
-  # pattern to parse in every declared language. The JS spellings (`=>`
-  # arrows, object literals, registerTool callback shape) do not parse as
-  # Python and the Python equivalents do not parse as JavaScript -- merging
-  # would invalidate the whole rule while scans still exit 0.
-  #
-  # The reference MCP SDKs ship in both languages, which is where these rules
-  # earn their keep.
-
-  # S3 in Python. The JS rule matches `ids.map(id => store.getNote(id))`;
-  # `.map` with an arrow has no Python spelling. The list comprehension is
-  # the idiomatic batch resolve. The exclusion covers the comprehension
-  # filter; re-filtering inside a for loop is NOT covered -- flagged here so
-  # nobody assumes more than was measured.
-  - id: mcp-batch-resolve-missing-per-item-scope-filter-py
-    languages: [python]
-    severity: WARNING
-    message: >
-      Multiple objects are resolved by client-supplied ids in a batch
-      comprehension, but the surrounding code applies no per-item scope
-      filter back to the caller's own scope (the list->get asymmetry,
-      CWE-862). Filter resolved items by the session's scope before
-      returning them. See
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
-    patterns:
-      - pattern: "$RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]"
-      - metavariable-regex:
-          metavariable: $METHOD
-          regex: "(?i)^(get|find).*"
-      # Same measured exclusion as the JavaScript sibling: an in-memory dict
-      # lookup (`response_map.get(id)`) is not a storage resolve.
-      - metavariable-regex:
-          metavariable: $STORE
-          regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
-      - pattern-not-inside: |
-          $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
-          ...
-          [$N for $N in $RESOLVED if ...]
-    metadata:
-      cwe: ["CWE-862"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
-
-  # S5 in Python. The JS rule is written against server.registerTool(...) plus
-  # an arrow-function handler, which cannot match Python. FastMCP registers
-  # tools with decorators over plain/async functions, so this sibling keys on
-  # the function NAME carrying admin and the handler body lacking a role
-  # check. Naming is documentation, not enforcement -- same defect, different
-  # registration syntax.
-  - id: mcp-admin-named-tool-missing-role-check-py
-    languages: [python]
-    severity: ERROR
-    message: >
-      A tool registered on an admin-sounding function never calls a role-check
-      function in its body. Naming it "admin_*" / "*_admin_*" documents intent
-      without enforcing it -- any valid token reaches the handler unless the
-      code verifies the caller's role. CWE-863 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass
-    patterns:
-      - pattern-either:
-          - pattern: |
-              @$DEC
-              def $FUNC(...):
-                  ...
-          - pattern: |
-              @$DEC
-              async def $FUNC(...):
-                  ...
+        - pattern: $FUNC()
+        - pattern: return $FUNC()
       - metavariable-regex:
           metavariable: $FUNC
-          regex: (?i).*admin.*
-      - pattern-not-inside: |
-          @$DEC
-          def $FUNC(...):
-              ...
-              require_admin_role(...)
-              ...
-      - pattern-not-inside: |
-          @$DEC
-          def $FUNC(...):
-              ...
-              check_admin_role(...)
-              ...
-      - pattern-not-inside: |
-          @$DEC
-          def $FUNC(...):
-              ...
-              assert_admin_role(...)
-              ...
-      - pattern-not-inside: |
-          @$DEC
-          def $FUNC(...):
-              ...
-              requireAdminRole(...)
-              ...
-    metadata:
-      cwe: ["CWE-863"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab
+          regex: (?i).*(all|every|global|unscoped).*
+    - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
+    - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
+    - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+    - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+    - patterns:
+      - pattern: if ($PARAM === "*") { ... }
+      - pattern-not: 'if ($PARAM === "*") { ... }
 
-  # S7 in Python. The JS object-literal filter `{ id }` does not parse as
-  # Python; SQLAlchemy spells the same omission in kwargs. Two shapes
-  # measured: filter_by(id=...) omits the tenant key from the WHERE, and
-  # session.get(Model, pk) fetches straight by primary key with no tenant
-  # column involved at all. The Model argument must start uppercase --
-  # dict.get spellings like config.get("timeout", 30) are everywhere in real
-  # Python and are not authorization decisions; that one constraint keeps
-  # them silent (measured). WARNING for the same honesty as the JS sibling:
-  # a genuinely globally-owned table fetched by id is a true negative.
-  - id: mcp-unscoped-query-object-fetch-py
-    languages: [python]
-    severity: WARNING
-    message: >
-      An object is fetched through a query that carries an id but no tenant
-      key (workspace_id / org_id / tenant_id / project_id ...), or fetched
-      straight by primary key. If the entity is multi-tenant, any caller's id
-      resolves regardless of tenant -- the query-scoped form of BOLA/IDOR,
-      CWE-639. Bind the tenant key into the same filter, sourced from the
-      session. There is no guard call to be missing here -- the authorization
-      IS the tenant key inside the filter. Confirm the entity is genuinely
-      tenant-scoped before treating this as a bug. See
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
-    patterns:
-      - pattern-either:
-          - pattern: "$Q.filter_by(id=$ID)"
-          - patterns:
-              - pattern: "$S.get($MODEL, $ID)"
-              - metavariable-regex:
-                  metavariable: $MODEL
-                  regex: ^[A-Z][A-Za-z0-9]*$
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: LOW
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+          ...
 
-  # S6 in Python. As predicted in the wave brief, the JS rule does not port
-  # directly: its core pattern `$STORE.$METHOD({ ..., orgId: x, ... })` is an
-  # object literal and cannot parse as Python. This sibling carries the same
-  # logic in kwargs spelling -- create/save taking its tenant key from a
-  # caller-supplied value, session-derived values excluded by name shape, and
-  # a preceding membership check making the argument legitimate. The
-  # `x if x else y` local-variable route into this sink is already covered by
-  # mcp-client-supplied-scope-overrides-session-py-ternary.
-  - id: mcp-write-parent-from-client-argument-py
-    languages: [python]
-    severity: WARNING
-    message: >
-      A create/save call takes its parent or tenant key from a caller-supplied
-      argument rather than the authenticated session. A caller can then plant
-      an object inside a tenant they do not belong to (foreign-parent
-      injection) even when every read path is correctly scoped. Bind the
-      parent to the session's own scope, or verify membership of the supplied
-      value before writing. CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
-    patterns:
-      - pattern: "$STORE.$METHOD(..., $KEY = $VAL, ...)"
-      - metavariable-regex:
-          metavariable: $METHOD
-          regex: (?i)^(create|insert|add|save|put|write|new)(_.*)?$
+          $STORE.$METHOD({ ..., $KEY: $SESSION_ORG, ... })'
       - metavariable-regex:
           metavariable: $KEY
           regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
-      # session-derived destinations are the correct shape and stay silent
-      - metavariable-regex:
-          metavariable: $VAL
-          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
-      # a membership check on the supplied value makes the argument legitimate
-      - pattern-not-inside:
-          patterns:
-            - pattern: |
-                $CHECK(...)
-                ...
-                $STORE.$METHOD(..., $KEY = $VAL, ...)
-            - metavariable-regex:
-                metavariable: $CHECK
-                regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+  - pattern-not-inside: 'requireAdminRole(...);
 
-  # ── S8: the resources/read surface ─────────────────────────────────────────
-  # `resources/*` is a separate MCP primitive from `tools/*` — its own
-  # registration API, its own handler signature ((uri, variables) instead of a
-  # single args object), its own client-side call (resources/read, not
-  # tools/call). Every rule above targets a tool handler; none of them can see
-  # this shape, because there is no `registerTool(...)` call here to anchor on.
-  #
-  # The bug: a URI template variable is caller-written the same way a tool
-  # argument is, but it is easy to mistake for a server-controlled path
-  # segment because it LOOKS like routing rather than input. Bind the tenant
-  # key straight from a URI variable and any caller who can write the URI
-  # chooses the scope.
-  #
-  # JavaScript/TypeScript only, plus a -py sibling below (FastMCP's decorator
-  # + function-signature shape does not parse as JS and the arrow-function
-  # handler shape does not parse as Python).
-  - id: mcp-resource-uri-variable-used-as-scope
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: >
-      An MCP resource read callback resolves an object using a URI template
-      variable as the tenant/scope key. A resources/read URI is written
-      entirely by the caller, the same as a tool argument, but it is easy to
-      mistake for a server-controlled path segment because it looks like
-      routing rather than input — and MCP hosts often gate tool calls behind
-      an approval prompt while treating resource reads as inert. Bind the
-      scope from the session resolved from the URI's identity variable
-      instead. CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
-    patterns:
-      - pattern-inside: |
-          async ($URI, { ... }) => { ... }
-      - pattern: "$STORE.$METHOD({ ..., $KEY: $VAL, ... })"
-      - metavariable-regex:
-          metavariable: $METHOD
-          regex: (?i)^(find|get)([A-Z_].*)?$
+      ...'
+  - pattern-not-inside: 'require_admin_role(...);
+
+      ...'
+  - pattern-not-inside: 'checkAdminRole(...);
+
+      ...'
+  - pattern-not-inside: 'check_admin_role(...);
+
+      ...'
+  - pattern-not-inside: 'assertAdminRole(...);
+
+      ...'
+  - pattern-not-inside: 'assert_admin_role(...);
+
+      ...'
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: LOW
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-batch-resolve-missing-per-item-scope-filter
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: "Multiple objects are resolved by client-supplied ids in a batch, but the surrounding code has no per-item scope filter (e.g. a \".filter(n => n.orgId === session.orgId)\" afterward). A sibling\
+    \ list() tool is often correctly scoped while its batch-get sibling skips the per-object check \xE2\u20AC\u201D the \"list->get asymmetry\" pattern. CWE-862 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry\n"
+  patterns:
+  - pattern: $IDS.map($F => $STORE.$METHOD($F))
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(get|find).*
+  - metavariable-regex:
+      metavariable: $STORE
+      regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+  - pattern-not-inside: '$RESOLVED = $IDS.map($F => $STORE.$METHOD($F));
+
+      ...
+
+      $RESOLVED.filter(...);
+
+      '
+  metadata:
+    cwe:
+    - CWE-862
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-admin-named-tool-missing-role-check
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: "A tool registered with an admin-sounding name never calls a role-check function in its handler. Naming a tool \"admin_*\" / \"*_admin_*\" is documentation, not enforcement \xE2\u20AC\u201D any\
+    \ valid token can reach it unless the handler actually verifies the caller's role. CWE-863 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass\n"
+  patterns:
+  - pattern: server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => { ... }))
+  - metavariable-regex:
+      metavariable: $NAME
+      regex: (?i).*admin.*
+  - pattern-not-inside: "server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {\n  ...\n  requireAdminRole(...);\n  ...\n}));\n"
+  - pattern-not-inside: "server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {\n  ...\n  checkAdminRole(...);\n  ...\n}));\n"
+  - pattern-not-inside: "server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => {\n  ...\n  assertAdminRole(...);\n  ...\n}));\n"
+  metadata:
+    cwe:
+    - CWE-863
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-client-supplied-scope-overrides-session-py-ternary
+  languages:
+  - python
+  severity: ERROR
+  message: "A client-supplied scope or identity argument can override the server-trusted session scope. Arguments like org_id/tenant_id/project_id/user_id must never select whose data a tool operates on\
+    \ \xE2\u20AC\u201D always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param\n"
+  patterns:
+  - pattern-either:
+    - pattern: $SCOPEPARAM if $SCOPEPARAM else $SESSION.$FIELD
+    - pattern: $SCOPEPARAM if $SCOPEPARAM is not None else $SESSION.$FIELD
+  - metavariable-regex:
+      metavariable: $SCOPEPARAM
+      regex: (?i)^(org|tenant|project|team|workspace|account|user|owner|group|realm|namespace)_?id$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-unscoped-query-object-fetch
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: 'An object is fetched by id through a query filter that carries no tenant key (workspaceId / projectId / organizationId / orgId / tenantId / accountId / userId / ownerId). If the entity is multi-tenant,
+    the query matches on id alone and any caller''s id resolves regardless of tenant -- the query-scoped form of object-level authorization failure (BOLA / IDOR, CWE-639). This is the shape CVE-2026-54052
+    (n8n, CVSS 9.6) took: a table fetched by a sequential id with the tenant column left out of the WHERE. Bind the tenant key into the same filter, sourced from the session, e.g. findOneBy({ id, workspaceId
+    }). A guard-call detector never sees this, because there is no guard call to be missing -- the authorization is the tenant key inside the filter. Confirm the entity is genuinely tenant-scoped before
+    treating this as a bug (a globally-owned table is a true negative).
+
+    '
+  patterns:
+  - pattern-either:
+    - pattern: $REPO.findOneBy($FILTER)
+    - pattern: $REPO.findNoteBy($FILTER)
+    - pattern: '$REPO.findOne({ where: $FILTER })'
+    - pattern: $REPO.delete($FILTER)
+    - pattern: $REPO.softDelete($FILTER)
+  - metavariable-pattern:
+      metavariable: $FILTER
+      pattern: '{ id: $ID }'
+  - pattern-not:
+      patterns:
+      - pattern-either:
+        - pattern: '$REPO.$M({ ..., $KEY: $V })'
+        - pattern: '$REPO.findOne({ where: { ..., $KEY: $V } })'
       - metavariable-regex:
           metavariable: $KEY
-          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
-      # session-derived scope is the correct shape and stays silent — same
-      # $VAL axis as mcp-write-parent-from-client-argument (S6). This is
-      # exactly the axis mcp-unscoped-query-object-fetch (S7) does NOT have:
-      # that rule only checks whether a tenant-shaped key is present in the
-      # filter, not where its value comes from.
-      - metavariable-regex:
-          metavariable: $VAL
-          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+          regex: (?i)^(workspaceId|projectId|organizationId|orgId|tenantId|accountId|userId|ownerId|teamId|realmId|namespaceId)$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: LOW
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+- id: mcp-write-parent-from-client-argument
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: "A create/save call takes its parent or tenant key from a caller-supplied argument rather than the authenticated session. A caller can then plant an object inside a tenant they do not belong\
+    \ to (foreign-parent injection) even when every read path is correctly scoped. Bind the parent to the session's own scope, or verify membership of the supplied value before writing. CWE-639 \xE2\u20AC\
+    \u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent\n"
+  patterns:
+  - pattern: '$STORE.$METHOD({ ..., $KEY: $VAL, ... })'
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(create|insert|add|save|put|write|new)([A-Z_].*)?$
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  - metavariable-regex:
+      metavariable: $VAL
+      regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+  - pattern-not-inside:
+      patterns:
+      - pattern: '$CHECK(...);
 
-  # S8 in Python. FastMCP resources are a decorated function whose parameters
-  # ARE the URI template variables — there is no destructured args object to
-  # anchor on, so the decorator itself is the signal.
-  - id: mcp-resource-uri-variable-used-as-scope-py
-    languages: [python]
-    severity: WARNING
-    message: >
-      An MCP resource handler (@mcp.resource) resolves an object using a URI
-      template variable as the tenant/scope key. Same defect as
-      mcp-resource-uri-variable-used-as-scope, FastMCP spelling: the template
-      variable arrives as a function parameter instead of a destructured
-      object. CWE-639 — see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
-    patterns:
-      - pattern-inside: |
-          @$MCP.resource(...)
-          def $FUNC(...):
-              ...
-      - pattern: "$STORE.$METHOD(..., $KEY = $VAL, ...)"
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
-      - metavariable-regex:
-          metavariable: $VAL
-          regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
-    metadata:
-      cwe: ["CWE-639"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+          ...
 
-  # S10: forwarded-header-as-scope. Transport-layer sibling of S2. Over the
-  # streamable-HTTP transport a tool receives the request headers in
-  # extra.requestInfo.headers; trusting a tenant/identity header as the scope
-  # is the real-world "trusting X-Forwarded-For for a security decision" class.
-  # Keyed on the header NAME, so a non-scope header (x-request-id) read for
-  # logging stays silent -- the two-way canary. WARNING, like S7/S8: it flags
-  # the shape for a reader rather than proving intent.
-  - id: mcp-authz-scope-from-request-header
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: >
-      An MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For,
-      ...) from the transport request and can use it to select scope. A request
-      header is entirely client-controlled -- any caller sets it -- so it must
-      never decide whose data a tool returns. Over the streamable-HTTP
-      transport this value arrives in extra.requestInfo.headers; derive the
-      scope from the server-trusted session instead. CWE-639/CWE-290 -- see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-    patterns:
-      - pattern-either:
-          - pattern: $E.requestInfo.headers[$HDR]
-          - pattern: $E.requestInfo.headers.get($HDR)
-          - pattern: $REQ.headers[$HDR]
-          - pattern: $REQ.headers.get($HDR)
-      - metavariable-regex:
-          metavariable: $HDR
-          regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
-    metadata:
-      cwe: ["CWE-639", "CWE-290"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+          $STORE.$METHOD({ ..., $KEY: $VAL, ... })
 
-  # S10 in Python. FastMCP exposes request headers via get_http_headers() (a
-  # dict); the access spelling is headers.get("x-org-id") or a subscript.
-  - id: mcp-authz-scope-from-request-header-py
-    languages: [python]
-    severity: WARNING
-    message: >
-      A FastMCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For,
-      ...) via get_http_headers() and can use it to select scope. A request
-      header is entirely client-controlled, so it must never decide whose data
-      a tool returns; derive the scope from the server-trusted session instead.
-      CWE-639/CWE-290 -- see
-      https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-    patterns:
-      - pattern-either:
-          - pattern: $H.get($HDR)
-          - pattern: $H[$HDR]
+          '
       - metavariable-regex:
-          metavariable: $HDR
-          regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
-    metadata:
-      cwe: ["CWE-639", "CWE-290"]
-      category: security
-      confidence: MEDIUM
-      references:
-        - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+          metavariable: $CHECK
+          regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)[A-Z_].*$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+- id: mcp-batch-resolve-missing-per-item-scope-filter-py
+  languages:
+  - python
+  severity: WARNING
+  message: 'Multiple objects are resolved by client-supplied ids in a batch comprehension, but the surrounding code applies no per-item scope filter back to the caller''s own scope (the list->get asymmetry,
+    CWE-862). Filter resolved items by the session''s scope before returning them. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
+
+    '
+  patterns:
+  - pattern: $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(get|find).*
+  - metavariable-regex:
+      metavariable: $STORE
+      regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+  - pattern-not-inside: '$RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+
+      ...
+
+      [$N for $N in $RESOLVED if ...]
+
+      '
+  metadata:
+    cwe:
+    - CWE-862
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-admin-named-tool-missing-role-check-py
+  languages:
+  - python
+  severity: ERROR
+  message: "A tool registered on an admin-sounding function never calls a role-check function in its body. Naming it \"admin_*\" / \"*_admin_*\" documents intent without enforcing it -- any valid token\
+    \ reaches the handler unless the code verifies the caller's role. CWE-863 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass\n"
+  patterns:
+  - pattern-either:
+    - pattern: "@$DEC\ndef $FUNC(...):\n    ...\n"
+    - pattern: "@$DEC\nasync def $FUNC(...):\n    ...\n"
+  - metavariable-regex:
+      metavariable: $FUNC
+      regex: (?i).*admin.*
+  - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    require_admin_role(...)\n    ...\n"
+  - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    check_admin_role(...)\n    ...\n"
+  - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    assert_admin_role(...)\n    ...\n"
+  - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    requireAdminRole(...)\n    ...\n"
+  metadata:
+    cwe:
+    - CWE-863
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+- id: mcp-unscoped-query-object-fetch-py
+  languages:
+  - python
+  severity: WARNING
+  message: 'An object is fetched through a query that carries an id but no tenant key (workspace_id / org_id / tenant_id / project_id ...), or fetched straight by primary key. If the entity is multi-tenant,
+    any caller''s id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. There is no guard call to be missing
+    here -- the authorization IS the tenant key inside the filter. Confirm the entity is genuinely tenant-scoped before treating this as a bug. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+
+    '
+  patterns:
+  - pattern-either:
+    - pattern: $Q.filter_by(id=$ID)
+    - patterns:
+      - pattern: $S.get($MODEL, $ID)
+      - metavariable-regex:
+          metavariable: $MODEL
+          regex: ^[A-Z][A-Za-z0-9]*$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: LOW
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+- id: mcp-write-parent-from-client-argument-py
+  languages:
+  - python
+  severity: WARNING
+  message: "A create/save call takes its parent or tenant key from a caller-supplied argument rather than the authenticated session. A caller can then plant an object inside a tenant they do not belong\
+    \ to (foreign-parent injection) even when every read path is correctly scoped. Bind the parent to the session's own scope, or verify membership of the supplied value before writing. CWE-639 \xE2\u20AC\
+    \u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent\n"
+  patterns:
+  - pattern: $STORE.$METHOD(..., $KEY = $VAL, ...)
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(create|insert|add|save|put|write|new)(_.*)?$
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  - metavariable-regex:
+      metavariable: $VAL
+      regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+  - pattern-not-inside:
+      patterns:
+      - pattern: '$CHECK(...)
+
+          ...
+
+          $STORE.$METHOD(..., $KEY = $VAL, ...)
+
+          '
+      - metavariable-regex:
+          metavariable: $CHECK
+          regex: (?i)^(require|assert|ensure|check|verify|authorize|can|must)
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent
+- id: mcp-resource-uri-variable-used-as-scope
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: "An MCP resource read callback resolves an object using a URI template variable as the tenant/scope key. A resources/read URI is written entirely by the caller, the same as a tool argument, but\
+    \ it is easy to mistake for a server-controlled path segment because it looks like routing rather than input \xE2\u20AC\u201D and MCP hosts often gate tool calls behind an approval prompt while treating\
+    \ resource reads as inert. Bind the scope from the session resolved from the URI's identity variable instead. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope\n"
+  patterns:
+  - pattern-inside: 'async ($URI, { ... }) => { ... }
+
+      '
+  - pattern: '$STORE.$METHOD({ ..., $KEY: $VAL, ... })'
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(find|get)([A-Z_].*)?$
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  - metavariable-regex:
+      metavariable: $VAL
+      regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+- id: mcp-resource-uri-variable-used-as-scope-py
+  languages:
+  - python
+  severity: WARNING
+  message: "An MCP resource handler (@mcp.resource) resolves an object using a URI template variable as the tenant/scope key. Same defect as mcp-resource-uri-variable-used-as-scope, FastMCP spelling: the\
+    \ template variable arrives as a function parameter instead of a destructured object. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope\n"
+  patterns:
+  - pattern-inside: "@$MCP.resource(...)\ndef $FUNC(...):\n    ...\n"
+  - pattern: $STORE.$METHOD(..., $KEY = $VAL, ...)
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+  - metavariable-regex:
+      metavariable: $VAL
+      regex: ^(?!.*(?i)(session|ctx|context|auth|principal|claims|token|user)\.).*$
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope
+- id: mcp-authz-scope-from-request-header
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: An MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the transport request and USES IT to select the authorization scope (e.g., passes it to a store list call, binds
+    it as orgId in a query). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Over the streamable-HTTP transport this value arrives
+    in extra.requestInfo.headers; derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+  patterns:
+  - pattern-either:
+    - pattern: $HDRVAL = $E.requestInfo.headers[$HDR]
+    - pattern: $HDRVAL = $E.requestInfo.headers.get($HDR)
+    - pattern: $HDRVAL = $REQ.headers[$HDR]
+    - pattern: $HDRVAL = $REQ.headers.get($HDR)
+  - metavariable-regex:
+      metavariable: $HDR
+      regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  - pattern-either:
+    - pattern: $STORE.$METHOD(..., $HDRVAL, ...)
+    - pattern: '$STORE.$METHOD({ ..., $KEY: $HDRVAL, ... })'
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(list|find|get|search|query|select).*
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  metadata:
+    cwe:
+    - CWE-639
+    - CWE-290
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+- id: mcp-authz-scope-from-request-header-py
+  languages:
+  - python
+  severity: WARNING
+  message: A FastMCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) via get_http_headers() and USES IT to select the authorization scope (e.g., passes it to a store list call, binds
+    it as org_id in a query). A request header is entirely client-controlled, so it must never decide whose data a tool returns; derive the scope from the server-trusted session instead. CWE-639/CWE-290
+    -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+  patterns:
+  - pattern-either:
+    - pattern: $HDRVAL = $H.get($HDR)
+    - pattern: $HDRVAL = $H[$HDR]
+  - metavariable-regex:
+      metavariable: $HDR
+      regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  - pattern-either:
+    - pattern: $STORE.$METHOD(..., $HDRVAL, ...)
+    - pattern: $STORE.$METHOD(..., $KEY = $HDRVAL, ...)
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(list|find|get|search|query|select).*
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+  metadata:
+    cwe:
+    - CWE-639
+    - CWE-290
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope

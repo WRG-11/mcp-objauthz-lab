@@ -10,8 +10,8 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing fifteen MCP tools and one MCP resource
-across **ten independent BOLA scenarios**. Each scenario is a different variant
+It is a multi-tenant note server exposing sixteen MCP tools and one MCP resource
+across **eleven independent BOLA scenarios**. Each scenario is a different variant
 of the same bug class, toggled by its own environment variable. Run them all at
 once or isolate one at a time.
 
@@ -55,6 +55,7 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S8](challenges/s8.md) | Resource-URI-as-scope — the resources/read surface, not tools/call |
 | [S9](challenges/s9.md) | Authz-from-client-round-tripped-value — an editable share grant |
 | [S10](challenges/s10.md) | Forwarded-header-as-scope — a trusted request header (HTTP transport) |
+| [S11](challenges/s11.md) | X-Forwarded-For quota bypass — a trusted request header for rate limiting (HTTP transport) |
 
 ## Quickstart (< 5 minutes)
 
@@ -63,13 +64,13 @@ Requirements: **Node.js ≥ 20**.
 ```bash
 npm install
 npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
-npm run poc # 26-row two-way gate — the tools/resources wired end-to-end over MCP
+npm run poc # 28-row two-way gate — the tools/resources wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (26/26 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (28/28 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (10 scenarios + hardened build)
+MCP object-level authorization lab — two-way gate (11 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -96,10 +97,14 @@ MCP object-level authorization lab — two-way gate (10 scenarios + hardened bui
   S9   fixed  note_share_redeem own grant     (Alice→Acme)   ALLOWED   ALLOWED   ✓
   S10  vuln   note_get_scoped X-Org-Id=org_globex (Alice over HTTP) LEAKED    LEAKED    ✓
   S10  fixed  note_get_scoped X-Org-Id=org_globex (Alice over HTTP) SCOPED    SCOPED    ✓
-  ALL  fixed  11 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
+  S11  vuln   note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
+  S11  vuln   note_create_limited X-Forwarded-For=5.6.7.8    BYPASS    BYPASS    ✓
+  S11  fixed  note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
+  S11  fixed  note_create_limited X-Forwarded-For=5.6.7.8    BLOCKED   BLOCKED   ✓
+  ALL  fixed  12 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (26/26 rows OK)
+  Two-way gate: PASS (28/28 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -109,7 +114,7 @@ same-org access still works (no false positive).
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
-access (an admin's cross-org read, a user's own note) still working. Each S1-S9
+access (an admin's cross-org read, a user's own note) still working. Each S1-S10
 arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
 without these rows the hardened build the section below tells you to run would
 have no coverage at all.
@@ -479,10 +484,10 @@ header. See [`challenges/s10.md`](challenges/s10.md).
 
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 14 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 16 [Semgrep](https://semgrep.dev)
 rules — one per code shape above, with Python siblings where the JavaScript
 spelling cannot parse as Python — that flag these patterns in **your own**
-MCP server source, not just this lab's. **Nine of the fourteen run against
+MCP server source, not just this lab's. **Ten of the sixteen run against
 Python as well as JavaScript/TypeScript**, which matters because the
 reference MCP SDKs ship in both.
 
@@ -492,27 +497,34 @@ S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
 no toggle, guard simply absent — both fire exactly as designed; the only code
 they go quiet on is a handler where the guard is *written but gated behind a
 runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
-the measured decision and the fixtures pinning it). With S8 and S9 added, the
-current measurement against this lab's own source is **7 of 9 scenarios
-flagged (S2, S3, S4, S6, S7, S8, S9)** — S1 and S5 are the only two still
-missed, for that same toggle-blindness reason. S9 has no dedicated rule: the
-existing `mcp-missing-object-authz-check` (S1's rule) already catches its
-vulnerable shape, since the fix path is a plain `$OBJ = store.get...(); ...;
-return ok($OBJ)` span with no guard call in between — see
-[`detection/README.md`](detection/README.md) for the measured caveat (it
-only catches the assignment-carrying spelling, not an inline
+the measured decision and the fixtures pinning it). With S8, S9, S10, and S11
+added, the current measurement against this lab's own source is **9 of 11
+scenarios flagged (S2, S3, S4, S6, S7, S8, S9, S10, S11)** — S1 and S5 are
+the only two still missed, for that same toggle-blindness reason. S9 has no
+dedicated rule: the existing `mcp-missing-object-authz-check` (S1's rule)
+already catches its vulnerable shape, since the fix path is a plain
+`$OBJ = store.get...(); ...; return ok($OBJ)` span with no guard call in
+between — see [`detection/README.md`](detection/README.md) for the measured
+caveat (it only catches the assignment-carrying spelling, not an inline
 `return ok(store.getNote(...))` with no local variable). Against the
 official `@modelcontextprotocol/sdk` the ruleset produces **zero findings**,
 measured with a planted canary proving the scan actually reached the tree
 (semgrep silently skips `node_modules`, so an unverified `0` is not a
 result).
 
-One of those five is worth spelling out, because it was wrong until 3.4.0. S6
-appeared covered: scans reported a finding inside `note_create_in_org`. What
-matched was this lab's own `modes.s6 === "vuln" ? … : …` toggle, a line no
-production server writes. Against four real spellings of the same bug the
-whole ruleset returned nothing. `mcp-write-parent-from-client-argument` catches
-the shape itself, and the fixture keeps proxy and target apart on purpose.
+Two rules were hardened in this release against false positives found in a
+9-repo audit:
+- `mcp-authz-scope-from-request-header` (+ `-py`): now requires the header
+  value to reach an **authorization decision** (store call selecting tenant
+  scope), not merely be read. Two-way canary: FIRE on scope decision, SILENT
+  on logging-only read.
+- `mcp-wildcard-sentinel-scope-bypass`: now requires the wildcard to be in an
+  **authorization bypass context** (gates scope widening), not a textual
+  comparison. Two-way canary: FIRE on authz bypass, SILENT on markup/UI filter.
+
+Real-capture fixtures from the audit validate both hardenings: `xff-for-logging.js/.py`
+(SILENT), `wildcard-in-markup.js` (SILENT), and `xff-for-ratelimit.js` (FIRE for
+the new S11 rule).
 
 Drop it into your own MCP server's CI as a GitHub Action. Findings upload to
 your repo's Security tab, so the calling workflow needs
@@ -534,9 +546,10 @@ steps:
 |---|---|
 | [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
 | [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
-| [`src/tools.js`](src/tools.js) | Fourteen tools plus one resource (`note://{token}/{orgId}/{noteId}`). Nine planted-bug handlers (one per scenario, S1-S9). |
-| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S9` env vars, passes a `modes` object to `registerTools`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 24-row two-way gate: all 9 scenarios in isolation, plus the all-`fixed` hardened build. |
+| [`src/tools.js`](src/tools.js) | Sixteen tools plus one resource (`note://{token}/{orgId}/{noteId}`). Eleven planted-bug handlers (one per scenario, S1-S11). |
+| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S11` env vars, passes a `modes` object to `registerTools`. |
+| [`src/http-server.js`](src/http-server.js) | Streamable-HTTP MCP server (for S10/S11). Same tools/store, transports headers via `extra.requestInfo.headers`. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 28-row two-way gate: all 11 scenarios in isolation, plus the all-`fixed` hardened build. |
 | [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (42 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
@@ -562,21 +575,23 @@ Each scenario is controlled by an independent env var (all default to `"vuln"`):
 | `LAB_S7` | S7 — `note_get_by_query` | tenant key omitted from the query filter; any org's id resolves | `orgId` bound into the same filter |
 | `LAB_S8` | S8 — `note://` resource | `orgId` URI path segment trusted as scope | URI segment ignored; session's own org used |
 | `LAB_S9` | S9 — `note_share_redeem` | decoded grant's `noteId` trusted with no session re-check | `requireOrgAccess()` re-checked against the resolved note |
+| `LAB_S10` | S10 — `note_get_scoped` | `X-Org-Id` header trusted as scope (HTTP) | Header ignored; session scope always used |
+| `LAB_S11` | S11 — `note_create_limited` | `X-Forwarded-For` header as quota key (HTTP) | Quota keyed to session; header ignored |
 
 Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
-LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed npm start
+LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed npm start
 
 # Windows PowerShell
-$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; npm start
+$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; $env:LAB_S10='fixed'; $env:LAB_S11='fixed'; npm start
 ```
 
 Isolate one scenario (e.g. test only S2):
 
 ```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed npm start
+LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed npm start
 ```
 
 ---

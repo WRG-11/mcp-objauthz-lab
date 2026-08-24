@@ -548,4 +548,54 @@ export function registerTools(server, store, modes) {
       return ok(store.listNotesByOrg(effectiveOrgId));
     }),
   );
+
+  // ── S11: note_create_limited ───────────────────────────────────────────────
+  // X-FORWARDED-FOR QUOTA/RATE-LIMIT BYPASS (CWE-639 / CWE-290) — the quota
+  // sibling of S10. HTTP-only (stdio has no headers, like S10).
+  //
+  // The tool enforces a per-client creation quota. In vuln mode the quota key
+  // is the X-Forwarded-For header — any caller can spoof it to reset their
+  // quota and create unlimited notes. In fixed mode the quota is keyed to the
+  // server-trusted session (token), so spoofing XFF has no effect.
+  //
+  // Real-world source: audit found SurfSense rate_limiter.py using XFF as the
+  // client identity for rate limiting → spoofed XFF bypasses the limit.
+  server.registerTool(
+    "note_create_limited",
+    {
+      description:
+        "Create a note with a per-client quota (max 3 notes). The quota is tracked by client identity.",
+      inputSchema: {
+        token: z.string(),
+        title: z.string(),
+        body: z.string().optional(),
+      },
+    },
+    guard(async ({ token, title, body }, extra) => {
+      const session = resolveSession(store, token);
+      // S11 vuln: quota keyed on X-Forwarded-For header (client-controlled).
+      // S11 fixed: quota keyed on session (server-trusted).
+      // Test-only: allow x-test-xff header to override x-forwarded-for for PoC testing
+      const testXff = extra?.requestInfo?.headers?.["x-test-xff"];
+      const xff = testXff ?? extra?.requestInfo?.headers?.["x-forwarded-for"];
+      const quotaKey =
+        modes.s11 === "vuln"
+          ? xff ?? session.orgId
+          : session.userId;
+      const currentCount = store.getQuotaCount(quotaKey);
+      if (currentCount >= 3) {
+        return fail(
+          `Quota exceeded for ${quotaKey}. Maximum 3 notes per client.`,
+        );
+      }
+      const note = store.createNote({
+        orgId: session.orgId,
+        ownerId: session.userId,
+        title,
+        body,
+      });
+      store.incrementQuota(quotaKey);
+      return ok(note);
+    }),
+  );
 }

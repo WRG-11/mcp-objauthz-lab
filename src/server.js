@@ -12,6 +12,8 @@
 //   LAB_S7             — S7: note_get_by_query omits the tenant key from the filter ("unscoped query")
 //   LAB_S8             — S8: the note:// resource trusts the orgId path segment ("resource-URI-as-scope")
 //   LAB_S9             — S9: note_share_redeem trusts the decoded grant's noteId ("authz-from-client-round-tripped-value")
+//   LAB_S10            — S10: note_get_scoped trusts X-Org-Id header as scope ("forwarded-header-as-scope", HTTP-only)
+//   LAB_S11            — S11: note_create_limited trusts X-Forwarded-For for quota ("XFF quota bypass", HTTP-only)
 //
 // Each scenario is independent: set all to "fixed" to run the fully hardened server,
 // or mix vuln/fixed to isolate one scenario at a time.
@@ -51,6 +53,7 @@ const modes = {
   s8: fixed(process.env.LAB_S8) ? "fixed" : "vuln",
   s9: fixed(process.env.LAB_S9) ? "fixed" : "vuln",
   s10: fixed(process.env.LAB_S10) ? "fixed" : "vuln",
+  s11: fixed(process.env.LAB_S11) ? "fixed" : "vuln",
 };
 
 const server = new McpServer({
@@ -66,5 +69,5 @@ await server.connect(transport);
 
 // stderr only — never stdout (that is the protocol channel).
 console.error(
-  `[mcp-objauthz-lab] up  S1=${modes.s1}  S2=${modes.s2}  S3=${modes.s3}  S4=${modes.s4}  S5=${modes.s5}  S6=${modes.s6}  S7=${modes.s7}  S8=${modes.s8}  S9=${modes.s9}  S10=${modes.s10} (HTTP-only)`,
+  `[mcp-objauthz-lab] up  S1=${modes.s1}  S2=${modes.s2}  S3=${modes.s3}  S4=${modes.s4}  S5=${modes.s5}  S6=${modes.s6}  S7=${modes.s7}  S8=${modes.s8}  S9=${modes.s9}  S10=${modes.s10}  S11=${modes.s11} (HTTP-only)`,
 );
