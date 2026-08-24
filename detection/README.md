@@ -70,8 +70,22 @@ correctness bar every rule was iterated against.
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **6 of 8 scenarios flagged (S2, S3, S4, S6, S7, S8). S1
-and S5 are missed.**
+ruleset against it: **7 of 9 scenarios flagged (S2, S3, S4, S6, S7, S8, S9).
+S1 and S5 are missed.**
+
+S9 has no dedicated rule. Measured before deciding that: `mcp-missing-
+object-authz-check` (S1's rule) already fires on `note_share_redeem`'s vuln
+branch, because the handler happens to carry the exact shape that rule
+targets — `$SESSION = resolveSession(...); ...; $OBJ = store.getNote($ID);
+...; return ok($OBJ);` with no guard call in between. A probe file (three
+functions: the vuln shape with a local assignment, the fixed shape, and an
+inline assignment-free spelling of the vuln shape) confirmed it fires on the
+first and stays silent on the other two. That last case is the caveat worth
+keeping: the rule catches `const note = store.getNote(id); ...; return
+ok(note)`, but **not** the same defect spelled inline as
+`return ok(store.getNote(id))` with no local variable — `mcp-missing-object-
+authz-check` was never anchored on an assignment by design, it just happens
+that both S1 and S9's tools.js code write it that way.
 
 Why S1/S5 are missed *there* — and why that says nothing about the rules on
 real code. Both rules work by checking that no authorization call *textually

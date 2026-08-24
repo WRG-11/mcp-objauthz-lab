@@ -10,8 +10,8 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing twelve MCP tools and one MCP resource
-across **eight independent BOLA scenarios**. Each scenario is a different variant
+It is a multi-tenant note server exposing fourteen MCP tools and one MCP resource
+across **nine independent BOLA scenarios**. Each scenario is a different variant
 of the same bug class, toggled by its own environment variable. Run them all at
 once or isolate one at a time.
 
@@ -40,7 +40,7 @@ scenarios), just in production instead of a lab.
 
 ## Try the challenges
 
-Eight hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+Nine hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
 until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
@@ -53,6 +53,7 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S6](challenges/s6.md) | Foreign-parent injection — create trusts a caller-supplied org |
 | [S7](challenges/s7.md) | Unscoped query — tenant key omitted from the filter (the real-world shape) |
 | [S8](challenges/s8.md) | Resource-URI-as-scope — the resources/read surface, not tools/call |
+| [S9](challenges/s9.md) | Authz-from-client-round-tripped-value — an editable share grant |
 
 ## Quickstart (< 5 minutes)
 
@@ -61,13 +62,13 @@ Requirements: **Node.js ≥ 20**.
 ```bash
 npm install
 npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
-npm run poc # 21-row two-way gate — the tools/resources wired end-to-end over MCP
+npm run poc # 24-row two-way gate — the tools/resources wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (21/21 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (24/24 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (8 scenarios + hardened build)
+MCP object-level authorization lab — two-way gate (9 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -89,10 +90,13 @@ MCP object-level authorization lab — two-way gate (8 scenarios + hardened buil
   S7   fixed  note_get_by_query cross-tenant (Alice→Globex)  DENIED    DENIED    ✓
   S8   vuln   resources/read cross-tenant (Alice→Globex)     LEAKED    LEAKED    ✓
   S8   fixed  resources/read cross-tenant (Alice→Globex)     DENIED    DENIED    ✓
-  ALL  fixed  10 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
+  S9   vuln   note_share_redeem tampered grant (Alice→Globex) LEAKED    LEAKED    ✓
+  S9   fixed  note_share_redeem tampered grant (Alice→Globex) DENIED    DENIED    ✓
+  S9   fixed  note_share_redeem own grant     (Alice→Acme)   ALLOWED   ALLOWED   ✓
+  ALL  fixed  11 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (21/21 rows OK)
+  Two-way gate: PASS (24/24 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -102,7 +106,7 @@ same-org access still works (no false positive).
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
-access (an admin's cross-org read, a user's own note) still working. Each S1-S8
+access (an admin's cross-org read, a user's own note) still working. Each S1-S9
 arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
 without these rows the hardened build the section below tells you to run would
 have no coverage at all.
@@ -401,6 +405,52 @@ trusted as authorization.
 
 ---
 
+## Scenario S9 — Authz-from-client-round-tripped-value
+
+**Tools:** `note_share_prepare`, `note_share_redeem`
+**Class:** CWE-639 — a value round-tripped through the client trusted as authorization
+**Toggle:** `LAB_S9`
+
+`note_share_prepare` is correctly authorized: it mints an opaque grant for a
+note the caller's own session can already access. `note_share_redeem` decodes
+that grant and serves whatever note id is inside it — on the assumption that
+"the grant must have come from an authorized tool." The grant is a plain
+client-side string between the two calls, with no cryptographic signature; a
+caller can decode it, edit it, and redeem the edited version.
+
+This is the shape a tool-chaining flow takes in MCP specifically: there is no
+server-side continuity between two `tools/call` invocations. Every value that
+crosses the gap between them travels through the client — and in an agentic
+pipeline, through the calling model's own context, where it can be edited or
+mangled without any deliberate tampering at all. "A prior tool already
+checked this" is a client-side claim, not a server-verified fact.
+
+**Challenge:** Alice (org Acme) prepares a share grant for her own note. She
+never authenticates as anyone else. How does she end up reading Globex's note?
+
+<details>
+<summary>Hint</summary>
+
+Look closely at what `note_share_prepare` actually returns. Is it opaque, or
+does it just look opaque?
+</details>
+
+<details>
+<summary>Answer</summary>
+
+The grant is base64url-encoded JSON, not a signed token. Alice decodes it,
+finds `{"noteId": "n_acme_1"}`, rewrites it to `{"noteId": "n_globex_1"}`,
+re-encodes it, and calls `note_share_redeem` with the tampered grant. In
+`LAB_S9=vuln` the tool resolves and returns whatever note the decoded grant
+names, with no re-check against Alice's session. The fix (`LAB_S9=fixed`)
+treats the decoded value as a hint, not an authorization: it calls
+`requireOrgAccess(session, note)` on the resolved note before returning it —
+the same object-level check every other scenario in this lab teaches, applied
+at the point a round-tripped client value is trusted again.
+</details>
+
+---
+
 ## Detection rules — automate the hunt
 
 [`detection/`](detection/README.md) ships 14 [Semgrep](https://semgrep.dev)
@@ -416,13 +466,20 @@ S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
 no toggle, guard simply absent — both fire exactly as designed; the only code
 they go quiet on is a handler where the guard is *written but gated behind a
 runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
-the measured decision and the fixtures pinning it). With S8 added, the
-current measurement against this lab's own source is **6 of 8 scenarios
-flagged (S2, S3, S4, S6, S7, S8)** — S1 and S5 are the only two still missed,
-for that same toggle-blindness reason. Against the official
-`@modelcontextprotocol/sdk` the ruleset produces **zero findings**, measured
-with a planted canary proving the scan actually reached the tree (semgrep
-silently skips `node_modules`, so an unverified `0` is not a result).
+the measured decision and the fixtures pinning it). With S8 and S9 added, the
+current measurement against this lab's own source is **7 of 9 scenarios
+flagged (S2, S3, S4, S6, S7, S8, S9)** — S1 and S5 are the only two still
+missed, for that same toggle-blindness reason. S9 has no dedicated rule: the
+existing `mcp-missing-object-authz-check` (S1's rule) already catches its
+vulnerable shape, since the fix path is a plain `$OBJ = store.get...(); ...;
+return ok($OBJ)` span with no guard call in between — see
+[`detection/README.md`](detection/README.md) for the measured caveat (it
+only catches the assignment-carrying spelling, not an inline
+`return ok(store.getNote(...))` with no local variable). Against the
+official `@modelcontextprotocol/sdk` the ruleset produces **zero findings**,
+measured with a planted canary proving the scan actually reached the tree
+(semgrep silently skips `node_modules`, so an unverified `0` is not a
+result).
 
 One of those five is worth spelling out, because it was wrong until 3.4.0. S6
 appeared covered: scans reported a finding inside `note_create_in_org`. What
@@ -451,9 +508,9 @@ steps:
 |---|---|
 | [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
 | [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
-| [`src/tools.js`](src/tools.js) | Twelve tools plus one resource (`note://{token}/{orgId}/{noteId}`). Eight planted-bug handlers (one per scenario, S1-S8). |
-| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S8` env vars, passes a `modes` object to `registerTools`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 21-row two-way gate: all 8 scenarios in isolation, plus the all-`fixed` hardened build. |
+| [`src/tools.js`](src/tools.js) | Fourteen tools plus one resource (`note://{token}/{orgId}/{noteId}`). Nine planted-bug handlers (one per scenario, S1-S9). |
+| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S9` env vars, passes a `modes` object to `registerTools`. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 24-row two-way gate: all 9 scenarios in isolation, plus the all-`fixed` hardened build. |
 | [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (42 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
@@ -478,21 +535,22 @@ Each scenario is controlled by an independent env var (all default to `"vuln"`):
 | `LAB_S6` | S6 — `note_create_in_org` | `org_id` param trusted as write target | `org_id` ignored; note created in session's own org |
 | `LAB_S7` | S7 — `note_get_by_query` | tenant key omitted from the query filter; any org's id resolves | `orgId` bound into the same filter |
 | `LAB_S8` | S8 — `note://` resource | `orgId` URI path segment trusted as scope | URI segment ignored; session's own org used |
+| `LAB_S9` | S9 — `note_share_redeem` | decoded grant's `noteId` trusted with no session re-check | `requireOrgAccess()` re-checked against the resolved note |
 
 Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
-LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed npm start
+LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed npm start
 
 # Windows PowerShell
-$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; npm start
+$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; npm start
 ```
 
 Isolate one scenario (e.g. test only S2):
 
 ```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed npm start
+LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed npm start
 ```
 
 ---
@@ -528,6 +586,12 @@ but forgets to check *whether you may touch this object*":
   handler binds a tenant/scope key straight from a URI template variable
   instead of the session — easy to miss because a review that only reads
   `tools/*` handlers never looks at `resources/*` at all.
+- [ ] **A value round-tripped through the client trusted as authorization
+  (→ S9).** A tool decodes a token/grant/cursor produced by an earlier tool
+  call and serves the object it names, with no re-check against the current
+  session — "an earlier tool already authorized this" is a client-side
+  claim, not a server fact, and it is not fixed by making the value
+  cryptographically signed if the redeeming tool never re-checks it.
 
 The exploit primitive is always the same: authenticate as tenant **B**, call the
 suspect tool with an object or scope that belongs to tenant **A**, and see whether
@@ -551,7 +615,7 @@ The most useful contribution to a detection ruleset is a **false positive** —
 a rule that fires on correctly authorized code. A gate wider than the defect
 it targets gets switched off, and a switched-off rule protects nothing, so
 those are treated as real defects here. Misses are just as welcome; the rules
-catch 6 of the 8 scenarios against this lab's own source and
+catch 7 of the 9 scenarios against this lab's own source and
 [`detection/README.md`](detection/README.md) says why.
 
 There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has
