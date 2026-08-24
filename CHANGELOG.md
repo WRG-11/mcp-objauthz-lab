@@ -25,26 +25,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   case, the fixed sibling, and a legitimate sibling whose URI template
   carries no tenant segment at all.
 - `challenges/s8.md` + `solutions/s8.md`.
+- **Scenario S9 — Authz-from-client-round-tripped-value**, on the tool-
+  chaining surface: `note_share_prepare` mints a correctly-authorized opaque
+  grant for the caller's own note; `note_share_redeem` decodes it and serves
+  whatever `noteId` is inside, with no re-check against the redeeming
+  session. The grant is plain base64url JSON with no signature, so no
+  cryptography is needed to tamper with it — decode, edit `noteId`,
+  re-encode. MCP tool chains have no server-side continuity between two
+  `tools/call` invocations; every value crossing that gap travels through
+  the client (and, in an agentic loop, through the calling model's own
+  context).
+- `challenges/s9.md` + `solutions/s9.md`.
 
 ### Changed
 
 - Rule count 12 → 14; Python-carrying rules 8 → 9. Fixture finding count
   33 → 35 (21 JavaScript + 14 Python) — S8 adds exactly one ruleid line per
   language, its fixed build and its no-tenant-segment sibling both silent by
-  design.
-- `src/tools.js` now registers one MCP resource alongside its twelve tools.
-  `src/server.js` reads `LAB_S8` alongside `LAB_S1..LAB_S7`.
-- `poc/exploit.js`'s two-way gate grows from 19 to 21 rows (two new S8 rows;
-  the `ALL`-fixed cross-tenant-route count grows from 9 to 10 to include the
-  resource read).
-- Running the ruleset against this lab's own `src/` now flags 6 of 8
-  scenarios (S2, S3, S4, S6, S7, S8) instead of 5 of 7 — S1 and S5 remain the
-  only two missed, for the same toggle-blindness reason documented in
+  design. S9 adds no fixture: measured against a probe file, the existing
+  `mcp-missing-object-authz-check` (S1's rule) already catches its
+  assignment-carrying vuln shape — the fixture count stays 35.
+- `src/tools.js` now registers one MCP resource and two more tools (fourteen
+  total) alongside the original twelve. `src/server.js` reads `LAB_S8` and
+  `LAB_S9` alongside `LAB_S1..LAB_S7`.
+- `poc/exploit.js`'s two-way gate grows from 19 to 24 rows (two S8 rows,
+  three S9 rows; the `ALL`-fixed cross-tenant-route count grows from 9 to 11
+  to include the resource read and the tampered-grant redeem).
+- Running the ruleset against this lab's own `src/` now flags 7 of 9
+  scenarios (S2, S3, S4, S6, S7, S8, S9) instead of 5 of 7 — S1 and S5 remain
+  the only two missed, for the same toggle-blindness reason documented in
   `detection/README.md`.
 
 Verified before release: 51 unit tests (including `docs-consistency.test.js`),
-PoC two-way gate 21/21 rows, fixture scan 35/35 matching `ci.yml`'s `want`,
-dogfood scan against `src/` 7 → 8 findings (did not drop), and zero findings
+PoC two-way gate 24/24 rows, fixture scan 35/35 matching `ci.yml`'s `want`,
+dogfood scan against `src/` 7 → 10 findings (did not drop), and zero findings
 across the official `@modelcontextprotocol/sdk` with a planted canary proving
 the scan reached that tree.
 
