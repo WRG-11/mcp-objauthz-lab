@@ -1,0 +1,100 @@
+rules:
+- id: mcp-authz-scope-from-request-header-csharp
+  languages:
+  - csharp
+  severity: WARNING
+  message: An ASP.NET Core MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to an EF Core query, binds it as OrgId in a Where clause). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+  patterns:
+  - pattern-either:
+      - pattern: $REQ.Headers[$HDR]
+      - pattern: $REQ.Headers.TryGetValue($HDR, out var $HDRVAL)
+      - pattern: Request.Headers[$HDR]
+      - pattern: Request.Headers.TryGetValue($HDR, out var $HDRVAL)
+  - metavariable-regex:
+      metavariable: $HDR
+      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
+  - pattern-either:
+      - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
+      - pattern: $REPO.Where(x => x.$KEY == $HDRVAL)
+      - pattern: $REPO.FirstOrDefault(x => x.$KEY == $HDRVAL)
+      - pattern: $REPO.SingleOrDefault(x => x.$KEY == $HDRVAL)
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(Where|FirstOrDefault|SingleOrDefault|Find|ToList|Select|All).*
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(OrgId|org_id|TenantId|tenant_id|WorkspaceId|workspace_id|ProjectId|project_id|OrganizationId|organization_id|AccountId|account_id|TeamId|team_id|CustomerId|customer_id)$
+  metadata:
+    cwe:
+    - CWE-639
+    - CWE-290
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+    provenance: POOL (TrashMobMCP, TrashMob)
+
+- id: mcp-wildcard-sentinel-scope-bypass-csharp
+  languages:
+  - csharp
+  severity: ERROR
+  message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit RequireAdminRole()-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  patterns:
+  - pattern-either:
+      - pattern: $PARAM == "*"
+      - pattern: $PARAM == "all"
+      - pattern: '"*" == $PARAM'
+      - pattern: '"all" == $PARAM'
+  - metavariable-regex:
+      metavariable: $PARAM
+      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+  - pattern-either:
+      - pattern: |
+          if ($PARAM == "*") {
+            ...
+            $REPO.$METHOD(...);
+            ...
+          }
+      - pattern: |
+          if ($PARAM == "all") {
+            ...
+            $REPO.$METHOD(...);
+            ...
+          }
+      - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+      - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: LOW
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab
+
+- id: mcp-unscoped-query-object-fetch-csharp
+  languages:
+  - csharp
+  severity: WARNING
+  message: An object is fetched by id through a query that carries no tenant key (WorkspaceId / ProjectId / OrganizationId / OrgId / TenantId / AccountId / UserId / OwnerId). If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+  patterns:
+  - pattern-either:
+      - pattern: (await $CTX.$SET.FindAsync($ID))
+      - pattern: (await $CTX.FindAsync<$T>($ID))
+      - pattern: (await $CTX.$SET.FirstOrDefaultAsync($X => $X.Id == $ID))
+      - pattern: (await $CTX.$SET.SingleOrDefaultAsync($X => $X.Id == $ID))
+      - pattern: $REPO.Find($ID)
+      - pattern: $REPO.FindAsync($ID)
+      - pattern: $REPO.FirstOrDefault(x => x.Id == $ID)
+      - pattern: $REPO.SingleOrDefault(x => x.Id == $ID)
+  - pattern-not: (await $CTX.$SET.FirstOrDefaultAsync($X => ... && $X.$TENANT == $T))
+  - metavariable-regex:
+      metavariable: $REPO
+      regex: .*Repository|.*DbSet|.*DbContext
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: LOW
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+    provenance: POOL (daohainam/microservice-patterns, eShopLite 06-mcp, TrashMob)

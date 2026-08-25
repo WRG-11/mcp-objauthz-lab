@@ -8,18 +8,18 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 14
-[Semgrep](https://semgrep.dev) rules covering the shapes from the eight lab
-scenarios. Nine of the fourteen run against **Python as well as
-JavaScript/TypeScript**: three shared rules declare both, and six `-py`
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 16
+[Semgrep](https://semgrep.dev) rules covering the shapes from the eleven lab
+scenarios. Ten of the sixteen run against **Python as well as
+JavaScript/TypeScript**: four shared rules declare both, and six `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each, detailed under their own headings below), for **20 rules across the `detection/semgrep/` directory** — the table lists all of them:
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **40 rules across the `detection/semgrep/` directory** — the table lists all of them:
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
 | `mcp-missing-object-authz-check` | S1 | object resolved by client id, mutated/returned with no `require*Access`/`check*Access`/`assert*Owner` call in between |
 | `mcp-client-supplied-scope-overrides-session` | S2 | `org_id`/`tenant_id`/`project_id`/`user_id`/`owner_id` argument used as a fallback/override for the session's own scope |
-| `mcp-wildcard-sentinel-scope-bypass` | S4 | a `"*"`/`"all"` sentinel value bypasses scope filtering with no role check nearby |
+| `mcp-wildcard-sentinel-scope-bypass` | S4 | a `"*"`/`"all"` sentinel value bypasses scope filtering with no role check nearby; **hardened: requires authz bypass context, not textual comparison** |
 | `mcp-batch-resolve-missing-per-item-scope-filter` | S3 | a batch of client-supplied ids is resolved with no `.filter(...)` back to the caller's own scope |
 | `mcp-admin-named-tool-missing-role-check` | S5 | a tool named `*admin*` never calls a role-check function in its handler |
 | `mcp-client-supplied-scope-overrides-session-py-ternary` | S2 (Python) | Python's `x if x else y` spelling of the same override — a separate rule because a multi-language rule needs every pattern valid in *every* declared language |
@@ -31,15 +31,34 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-write-parent-from-client-argument-py` | S6 (Python) | the kwargs spelling of the foreign-parent create/save. **WARNING**, same honesty as its JS sibling |
 | `mcp-resource-uri-variable-used-as-scope` | S8 | an MCP resource read callback (`resources/read`, not `tools/call`) binds a tenant/scope key straight from a URI template variable instead of the session |
 | `mcp-resource-uri-variable-used-as-scope-py` | S8 (Python) | the FastMCP `@mcp.resource(...)`-decorated spelling: the template variable is a function parameter, not a destructured object |
+| `mcp-authz-scope-from-request-header` | S10 | a scope/identity request header (`X-Org-Id`, `X-Forwarded-For`, ...) read from `extra.requestInfo.headers` over the streamable-HTTP transport and **used to select tenant scope**; keyed on the header **name** and **usage**, so a non-scope header (`X-Request-Id`) read for logging stays silent. **WARNING** |
+| `mcp-authz-scope-from-request-header-py` | S10 (Python) | the FastMCP spelling: the same scope-shaped header read via `get_http_headers()` / a `.get()` or subscript, **used in an authz decision**. **WARNING** |
+| `mcp-ratelimit-scope-from-forwarded-header` | S11 | a client-identity header (`X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`, ...) read from `extra.requestInfo.headers` and **used as a quota/rate-limit key**; keyed on the header **name** and **usage**, so a non-quota header read for logging stays silent. **WARNING** |
+| `mcp-ratelimit-scope-from-forwarded-header-py` | S11 (Python) | the FastMCP spelling: the same client-identity header read via `get_http_headers()` and used as a quota/rate-limit key. **WARNING** |
 | `mcp-missing-object-authz-check-go` | S1 (Go) | object resolved by `$STORE.$GETMETHOD($ID)`, mutated with no `Require*Access`/`Check*Access`/`Assert*Owner` call (exported and unexported spelling) in between |
 | `mcp-client-supplied-scope-overrides-session-go` | S2 (Go) | Go's zero-value-fallback spelling of the override (`scope := args.OrgID; if scope == "" { scope = session.OrgID }`) — Go has no `||`/`??`/ternary, so the JS/PY override shape doesn't port directly |
 | `mcp-unscoped-query-object-fetch-go` | S7 (Go) | the struct/ORM primary-key lookup idiom, `$DB.First(&$X, $ID)`, with no tenant key bound into the same query. **WARNING**, same honesty as its JS/PY siblings — and a narrower one: a raw-SQL-string lookup is a Go-specific blind spot this rule does not cover (see below) |
 | `mcp-missing-object-authz-check-rust` | S1 (Rust) | `let`-bound fetch/mutate sequence (`let obj = store.get(&id); ... store.delete(&obj.id)`) with no `require_*`/`check_*`/`assert_*` call in between (snake_case guard names) |
 | `mcp-client-supplied-scope-overrides-session-rust` | S2 (Rust) | a client-destructured scope field (`org_id` from `Parameters<T>`) reaching the store call in place of the session's own; the anchored name regex leaves a `session.org_id` field access silent |
 | `mcp-admin-named-tool-missing-role-check-rust` | S5 (Rust) | an admin-named `#[tool]` async fn whose body never calls `require_admin_role`/`check_admin_role`/`assert_admin_role` — naming is documentation, not enforcement |
-
-| `mcp-authz-scope-from-request-header` | S10 | a scope/identity request header (`X-Org-Id`, `X-Forwarded-For`, ...) read from `extra.requestInfo.headers` over the streamable-HTTP transport and usable as the tenant scope; keyed on the header **name**, so a non-scope header (`X-Request-Id`) read for logging stays silent. **WARNING** |
-| `mcp-authz-scope-from-request-header-py` | S10 (Python) | the FastMCP spelling: the same scope-shaped header read via `get_http_headers()` / a `.get()` or subscript. **WARNING** |
+| `mcp-authz-scope-from-request-header-kotlin` | S10 (Kotlin) | header (`X-Org-Id`, `X-Forwarded-For`, ...) read via `request.headers["X-Org-Id"]` / `.get()` and used to select tenant scope; **WARNING** |
+| `mcp-wildcard-sentinel-scope-bypass-kotlin` | S4 (Kotlin) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
+| `mcp-unscoped-query-object-fetch-kotlin` | S7 (Kotlin) | `findById(id)` / `findOneBy(mapOf("id" to id))` with no tenant key; **WARNING** |
+| `mcp-authz-scope-from-request-header-java` | S10 (Java) | header read via `request.getHeader("X-Org-Id")` and used to select tenant scope; **WARNING** |
+| `mcp-wildcard-sentinel-scope-bypass-java` | S4 (Java) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
+| `mcp-unscoped-query-object-fetch-java` | S7 (Java) | `findById(id)` with no tenant key bound into query; **WARNING** |
+| `mcp-authz-scope-from-request-header-ruby` | S10 (Ruby) | header read via `request.headers["X-Org-Id"]` / `.fetch()` and used to select tenant scope; **WARNING** |
+| `mcp-wildcard-sentinel-scope-bypass-ruby` | S4 (Ruby) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
+| `mcp-unscoped-query-object-fetch-ruby` | S7 (Ruby) | `find_by(id: id)` / `where(id: id).first` with no tenant key; **WARNING** |
+| `mcp-authz-scope-from-request-header-php` | S10 (PHP) | header read via `$request->header("X-Org-Id")` / `$request->headers->get()` and used to select tenant scope; **WARNING** |
+| `mcp-wildcard-sentinel-scope-bypass-php` | S4 (PHP) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
+| `mcp-unscoped-query-object-fetch-php` | S7 (PHP) | `Model::find(id)` / `where('id', id)->first()` with no tenant key; **WARNING** |
+| `mcp-authz-scope-from-request-header-csharp` | S10 (C#) | header read via `request.Headers["X-Org-Id"]` and used to select tenant scope; **WARNING** |
+| `mcp-wildcard-sentinel-scope-bypass-csharp` | S4 (C#) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
+| `mcp-unscoped-query-object-fetch-csharp` | S7 (C#) | `Find(id)` / `FirstOrDefault(x => x.Id == id)` with no tenant key; **WARNING** |
+| `mcp-authz-scope-from-request-header-swift` | S10 (Swift) | header read via `req.headers["X-Org-Id"]` / `.first` and used to select tenant scope; **WARNING** |
+| `mcp-wildcard-sentinel-scope-bypass-swift` | S4 (Swift) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
+| `mcp-unscoped-query-object-fetch-swift` | S7 (Swift) | `find(id)` / `query(\.id == id).first()` with no tenant key; **WARNING** |
 
 ### Go pack
 
@@ -74,6 +93,66 @@ scope field's *name*, so a session-derived local that is renamed to `org_id`
 is a documented, deliberate limitation rather than a miss — taint mode resolves
 it and was verified to do so, but is kept out to match the existing rules.
 
+### Kotlin pack
+
+[`semgrep/mcp-object-authz-kotlin.yml`](semgrep/mcp-object-authz-kotlin.yml) covers
+Kotlin MCP servers built on [`ktor`](https://ktor.io/) or Spring Boot,
+in its own file. Kotlin's nullable types and Elvis operator (`?:`) for
+fallbacks map closely to the JS/PY override shapes.
+
+Three scenarios are covered (S4, S7, S10); S10 uses a simplified pattern
+matching header access via `request.headers["X-Org-Id"]` or `.get()`.
+
+### Java pack
+
+[`semgrep/mcp-object-authz-java.yml`](semgrep/mcp-object-authz-java.yml) covers
+Java MCP servers built on Spring WebFlux / WebMVC,
+in its own file. Java's `Optional.orElse()` and `HeaderAccessor` patterns
+map to the JS/PY override shapes.
+
+Three scenarios are covered (S4, S7, S10); S10 uses a simplified pattern
+matching header access via `request.getHeader("X-Org-Id")`.
+
+### Ruby pack
+
+[`semgrep/mcp-object-authz-ruby.yml`](semgrep/mcp-object-authz-ruby.yml) covers
+Ruby MCP servers built on Rails / Sinatra,
+in its own file. Ruby's `||` fallback and `fetch(key, default)` map directly
+to the JS/PY override shapes.
+
+Three scenarios are covered (S4, S7, S10); S10 uses a simplified pattern
+matching header access via `request.headers["X-Org-Id"]` or `.fetch()`.
+
+### PHP pack
+
+[`semgrep/mcp-object-authz-php.yml`](semgrep/mcp-object-authz-php.yml) covers
+PHP MCP servers built on Laravel / Symfony,
+in its own file. PHP's `??` nullish coalescing and `?:` Elvis operator map
+directly to the JS/PY override shapes.
+
+Three scenarios are covered (S4, S7, S10); S10 uses a simplified pattern
+matching header access via `$request->header("X-Org-Id")` or `$request->headers->get()`.
+
+### C# pack
+
+[`semgrep/mcp-object-authz-csharp.yml`](semgrep/mcp-object-authz-csharp.yml) covers
+C# MCP servers built on ASP.NET Core,
+in its own file. C#'s `??` nullish coalescing and `Headers.TryGetValue` map
+to the JS/PY override shapes.
+
+Three scenarios are covered (S4, S7, S10); S10 uses a simplified pattern
+matching header access via `request.Headers["X-Org-Id"]`.
+
+### Swift pack
+
+[`semgrep/mcp-object-authz-swift.yml`](semgrep/mcp-object-authz-swift.yml) covers
+Swift MCP servers built on Vapor / SwiftNIO,
+in its own file. Swift's `??` nil-coalescing and `headers["X-Org-Id"].first`
+map to the JS/PY override shapes.
+
+Three scenarios are covered (S4, S7, S10); S10 uses a simplified pattern
+matching header access via `req.headers["X-Org-Id"]`.
+
 ## Run it
 
 ```bash
@@ -105,7 +184,7 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **14/14 rules fire
+minimal vulnerable snippet and one fixed snippet per rule. **32/32 rules fire
 on the vulnerable snippet and stay silent on the fixed one.** This is the
 correctness bar every rule was iterated against.
 

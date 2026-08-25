@@ -66,6 +66,9 @@ export function createStore() {
 
   let seq = 100;
 
+  // S11: per-client creation quota map
+  const quotas = new Map();
+
   return {
     getOrg:  (id) => orgs.get(id),
     getUser: (id) => users.get(id),
@@ -114,5 +117,11 @@ export function createStore() {
             n.body.toLowerCase().includes(needle)),
       );
     },
+
+    // ── S11 surface ────────────────────────────────────────────────────────────
+    // Per-client creation quota. In vuln mode the quota key is X-Forwarded-For
+    // (client-controlled); in fixed mode it is the session userId.
+    getQuotaCount: (key) => quotas.get(key) ?? 0,
+    incrementQuota: (key) => quotas.set(key, (quotas.get(key) ?? 0) + 1),
   };
 }

@@ -4,6 +4,71 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.1] — 2026-08-25
+
+### Fixed
+
+- **`mcp-ratelimit-scope-from-forwarded-header` (+ `-py`) now fires on real-capture fixtures.** The S11 rule's `pattern-either` structure was tuned to match the actual SurfSense audit pattern: optional-chained header access (`extra?.requestInfo?.headers?.["x-forwarded-for"]`) with nullish coalescing (`?? session.userId`) assigned to a variable, then used in quota/rate-limit store calls (`store.getQuotaCount(quotaKey)`, `store.isRateLimited(rateLimitKey)`). Block patterns matching the function body now correctly bind the header variable across assignment and use sites. Two-way canary verified:
+  - FIRE: `xff-for-ratelimit.js` — all three quota/rate-limit vulnerability cases match (3 findings)
+  - SILENT: `xff-for-logging.js` — XFF read for logging only produces zero findings
+- CI fixture count updated: 39 → 42 (3 new S11 JS findings)
+
+## [3.8.0] — 2026-08-24
+
+### Added
+
+- **Scenario S11 — X-Forwarded-For quota/rate-limit bypass**, the quota/rate-limit
+  sibling of S10 on the **HTTP transport surface**. The new `note_create_limited`
+  tool enforces a per-client creation quota (max 3 notes). In vuln mode the
+  quota key is the `X-Forwarded-For` header — any caller can spoof it to reset
+  their quota and create unlimited notes. In fixed mode the quota is keyed to
+  the server-trusted session (`session.userId`). Real-world source: audit found
+  SurfSense `rate_limiter.py` using XFF as the client identity for rate limiting.
+  (CWE-639 / CWE-290.)
+- `src/tools.js`: new `note_create_limited` tool with XFF-based quota (vuln) vs
+  session-based quota (fixed). `src/store.js`: `getQuotaCount`/`incrementQuota`
+  methods for the quota surface.
+- Detection rules `mcp-ratelimit-scope-from-forwarded-header` (+ `-py` FastMCP
+  sibling) plus real-capture fixtures. They key on quota/rate-limit header names
+  (`X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`) used as the key for a quota
+  or rate-limit counter; a non-quota header read for logging stays silent — the
+  two-way canary.
+- `challenges/s11.md` + `solutions/s11.md`. S11's challenge Setup uses the HTTP
+  server; every other challenge's Setup now also pins `LAB_S11=fixed`.
+
+### Fixed
+
+- **`mcp-authz-scope-from-request-header` (+ `-py`) hardened against false positives.**
+  The rule previously fired on ANY read of a scope-shaped header (`X-Forwarded-For`,
+  `X-Org-Id`, ...). Now it REQUIRES the header value to reach an AUTHORIZATION
+  DECISION (a store/list call that selects tenant scope, or an orgId binding in
+  a query), not merely be read into a variable. Two-way canary verified:
+  - FIRE: `const org = headers["x-org-id"]; return listNotesByOrg(org)` (scope decision)
+  - SILENT: `const ip = headers["x-forwarded-for"]; logger.info(ip)` (logging only)
+- **`mcp-wildcard-sentinel-scope-bypass` hardened against false positives.**
+  The rule previously fired on ANY `"*"`/`"all"` comparison with a scope-like
+  parameter name. Now it REQUIRES the wildcard to be in an AUTHORIZATION BYPASS
+  CONTEXT (it gates scope widening, returns all tenants' data), not a textual
+  comparison. Two-way canary verified:
+  - FIRE: `if (scope === "*") return allOrgsNotes()` (authz bypass)
+  - SILENT: `text.replace(/\*(.+?)\*/, "<b>$1</b>")` (markup) or UI search filter
+
+### Changed
+
+- Rule count 22 → 24 (+2 S11). Fixture finding count updated for new fixtures
+  and hardened rules. Scenario count 10 → 11; tool count 15 → 16
+  (`note_create_limited`). PoC two-way gate 26 → 28 rows (two S11 arms, run
+  over a real HTTP round-trip with spoofed XFF). `docs-consistency.test.js`
+  accepts an `http-server.js` Setup command and counts up to 16 tools + 1 resource.
+- Real-capture fixtures added: `xff-for-logging.js/.py` (SILENT for S10 rule),
+  `wildcard-in-markup.js` (SILENT for S4 rule), `xff-for-ratelimit.js` (FIRE
+  for S11 rule) — minimal/anonymized patterns from the 9-repo audit.
+
+Verified before release: 51 unit tests, PoC two-way gate 28/28 rows (incl. the
+S11 HTTP arm proving a spoofed `X-Forwarded-For` bypasses quota in vuln and is
+ignored in fixed), and `semgrep --config detection/semgrep/` gives correct
+findings with 0 parse errors across all four languages.
+
 ## [3.7.0] — 2026-08-24
 
 ### Added

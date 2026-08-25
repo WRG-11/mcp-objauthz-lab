@@ -3,3 +3,8 @@ package-lock.json
 *.log
 .DS_Store
 artifacts/
+
+# WRG dispatch/done reports -- internal Turkish, never commit to this public repo
+WRG_BRIEF*.md
+WRG_DONE*.md
+WRG_*.md
