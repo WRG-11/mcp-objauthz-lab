@@ -170,3 +170,34 @@ test("SECURITY.md's toggle range ends at the last scenario", () => {
     `SECURITY.md describes the toggles but never reaches ${last}`,
   );
 });
+
+// ── repeated numeric claims in the prose must agree with each other ─────────
+// v3.10's mega-PR updated the PoC output BLOCK (38 rows, S1-S13) but left
+// "28-row" and "34/34 rows" in the surrounding prose, and "42 tests" in the
+// file-table row while the Quickstart said "51 tests". The table-derived
+// asserts above all passed — those numbers live in free text, not the tables.
+// A count stated more than once must state the SAME number every time. This is
+// the class the whole v3.10 doc-drift belonged to; it derives nothing from
+// source, it just refuses to let README contradict itself.
+test("README states each repeated count consistently", () => {
+  const readme = read("README.md");
+  const nums = (re) => [
+    ...new Set([...readme.matchAll(re)].map((m) => Number(m[1]))),
+  ];
+
+  const pocRows = nums(/(\d+)[- ]row\b/gi).concat(
+    [...readme.matchAll(/(\d+)\/\d+ rows\b/gi)].map((m) => Number(m[1])),
+  );
+  assert.ok(
+    new Set(pocRows).size <= 1,
+    `README states inconsistent PoC-row counts ${[...new Set(pocRows)]} — ` +
+      `update every "N-row" / "N/N rows" mention together`,
+  );
+
+  const testCounts = nums(/(\d+) tests?\b/gi);
+  assert.ok(
+    testCounts.length <= 1,
+    `README states inconsistent unit-test counts ${testCounts} — ` +
+      `the Quickstart and the file table must agree`,
+  );
+});

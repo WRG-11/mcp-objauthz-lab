@@ -66,10 +66,10 @@ Requirements: **Node.js ≥ 20**.
 ```bash
 npm install
 npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
-npm run poc # 28-row two-way gate — the tools/resources wired end-to-end over MCP
+npm run poc # 38-row two-way gate — the tools/resources wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (34/34 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (38/38 rows, all scenarios + the hardened build):
 
 ```
 MCP object-level authorization lab — two-way gate (13 scenarios + hardened build)
@@ -110,7 +110,7 @@ MCP object-level authorization lab — two-way gate (13 scenarios + hardened bui
   ALL  fixed  14 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (34/34 rows OK)
+  Two-way gate: PASS (38/38 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -143,7 +143,7 @@ delete any org's note** by knowing or guessing its id.
 caller in one org delete another org's note. Which one, and what makes it
 different?
 
-> The server exposes twelve tools in total; the other six belong to S3-S7 and
+> The server exposes eighteen tools in total; six of them belong to S3-S7 and
 > are vulnerable in their own default state. Run
 > [`challenges/s1.md`](challenges/s1.md)'s Setup command, which pins them to
 > `fixed`, or this scenario has more than one answer.
@@ -490,10 +490,11 @@ header. See [`challenges/s10.md`](challenges/s10.md).
 
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 16 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 40 [Semgrep](https://semgrep.dev)
 rules — one per code shape above, with Python siblings where the JavaScript
-spelling cannot parse as Python — that flag these patterns in **your own**
-MCP server source, not just this lab's. **Ten of the sixteen run against
+spelling cannot parse as Python, plus Go, Rust, Kotlin, Java, Ruby, PHP, C#,
+and Swift language packs — that flag these patterns in **your own**
+MCP server source, not just this lab's. **Ten of them run against
 Python as well as JavaScript/TypeScript**, which matters because the
 reference MCP SDKs ship in both.
 
@@ -503,10 +504,13 @@ S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
 no toggle, guard simply absent — both fire exactly as designed; the only code
 they go quiet on is a handler where the guard is *written but gated behind a
 runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
-the measured decision and the fixtures pinning it). With S8, S9, S10, and S11
-added, the current measurement against this lab's own source is **9 of 11
-scenarios flagged (S2, S3, S4, S6, S7, S8, S9, S10, S11)** — S1 and S5 are
-the only two still missed, for that same toggle-blindness reason. S9 has no
+the measured decision and the fixtures pinning it). With S12 and S13
+added, the current measurement against this lab's own source is **7 of the 13
+scenarios flagged (S1, S2, S6, S7, S8, S12, S13)**. The remaining six stay
+quiet: S3-S5 and S9-S11 sit behind a runtime toggle (this lab's own
+scaffolding) or, for S10/S11, a transport-header shape the JS rules match only
+in the language packs — see [`detection/README.md`](detection/README.md) for
+the per-scenario breakdown and the fixtures pinning it. S9 has no
 dedicated rule: the existing `mcp-missing-object-authz-check` (S1's rule)
 already catches its vulnerable shape, since the fix path is a plain
 `$OBJ = store.get...(); ...; return ok($OBJ)` span with no guard call in
@@ -552,11 +556,11 @@ steps:
 |---|---|
 | [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
 | [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
-| [`src/tools.js`](src/tools.js) | Sixteen tools plus one resource (`note://{token}/{orgId}/{noteId}`). Eleven planted-bug handlers (one per scenario, S1-S11). |
-| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S11` env vars, passes a `modes` object to `registerTools`. |
+| [`src/tools.js`](src/tools.js) | Eighteen tools plus one resource (`note://{token}/{orgId}/{noteId}`). Thirteen planted-bug handlers (one per scenario, S1-S13). |
+| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S13` env vars, passes a `modes` object to `registerTools`. |
 | [`src/http-server.js`](src/http-server.js) | Streamable-HTTP MCP server (for S10/S11). Same tools/store, transports headers via `extra.requestInfo.headers`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 28-row two-way gate: all 11 scenarios in isolation, plus the all-`fixed` hardened build. |
-| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (42 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
+| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 38-row two-way gate: all 13 scenarios in isolation, plus the all-`fixed` hardened build. |
+| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (51 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
 the server resolves to a fixed user, org, and role. The caller never asserts its
@@ -664,7 +668,7 @@ The most useful contribution to a detection ruleset is a **false positive** —
 a rule that fires on correctly authorized code. A gate wider than the defect
 it targets gets switched off, and a switched-off rule protects nothing, so
 those are treated as real defects here. Misses are just as welcome; the rules
-catch 7 of the 9 scenarios against this lab's own source and
+catch 7 of the 13 scenarios against this lab's own source and
 [`detection/README.md`](detection/README.md) says why.
 
 There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has
