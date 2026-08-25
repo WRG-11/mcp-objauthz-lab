@@ -6,15 +6,22 @@ rules:
   message: A Rails/Sinatra MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to a model scope, binds it as org_id in a query). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
   patterns:
   - pattern-either:
-    - pattern: request.headers[$HDR]
-    - pattern: request.headers.fetch($HDR, $FALLBACK)
+      - pattern: request.headers[$HDR]
+      - pattern: request.headers.fetch($HDR, $FALLBACK)
+      - pattern: request.headers[$HDR].presence
   - metavariable-regex:
       metavariable: $HDR
       regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern: $MODEL.$METHOD(..., $HDRVAL, ...)
+  - pattern-either:
+      - pattern: $MODEL.$METHOD(..., $HDRVAL, ...)
+      - pattern: $MODEL.where($KEY => $HDRVAL)
+      - pattern: $MODEL.find_by($KEY => $HDRVAL)
   - metavariable-regex:
       metavariable: $METHOD
       regex: (?i)^(where|find|find_by|search|query|select|all).*
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
   metadata:
     cwe:
     - CWE-639
@@ -23,6 +30,7 @@ rules:
     confidence: MEDIUM
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+    provenance: POOL (miru-web, woofed-crm, sepomex)
 
 - id: mcp-wildcard-sentinel-scope-bypass-ruby
   languages:
@@ -31,26 +39,26 @@ rules:
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit require_admin_role-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
   patterns:
   - pattern-either:
-    - pattern: $PARAM == "*"
-    - pattern: $PARAM == "all"
+      - pattern: $PARAM == "*"
+      - pattern: $PARAM == "all"
   - metavariable-regex:
       metavariable: $PARAM
       regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
   - pattern-either:
-    - pattern: |
-        if $PARAM == "*"
-          ...
-          $MODEL.$METHOD(...)
-          ...
-        end
-    - pattern: |
-        if $PARAM == "all"
-          ...
-          $MODEL.$METHOD(...)
-          ...
-        end
-    - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      - pattern: |
+          if $PARAM == "*"
+            ...
+            $MODEL.$METHOD(...)
+            ...
+          end
+      - pattern: |
+          if $PARAM == "all"
+            ...
+            $MODEL.$METHOD(...)
+            ...
+          end
+      - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+      - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
   metadata:
     cwe:
     - CWE-639
@@ -66,13 +74,23 @@ rules:
   message: An object is fetched by id through a query that carries no tenant key (workspace_id / org_id / tenant_id / project_id ...), or fetched straight by primary key. If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
   patterns:
   - pattern-either:
-    - pattern: $MODEL.find($ID)
-    - pattern: '$MODEL.find_by(id: $ID)'
-    - pattern: '$MODEL.where(id: $ID).first'
-    - pattern: $MODEL.delete($ID)
+      - pattern: $MODEL.find(params[:$K])
+      - pattern: '$MODEL.find_by(id: params[:$K])'
+      - pattern: '$MODEL.find_by!(id: params[:$K])'
+      - pattern: '$MODEL.where(id: params[:$K]).first'
+      - pattern: $MODEL.delete(params[:$K])
+  - pattern-not:
+      patterns:
+        - pattern-either:
+            - pattern: '$MODEL.where(..., $TENANT_KEY => $TENANT_VAL, ...).find(params[:$K])'
+            - pattern: '$MODEL.find_by(id: params[:$K], $TENANT_KEY => $TENANT_VAL)'
+            - pattern: '$MODEL.find_by!(id: params[:$K], $TENANT_KEY => $TENANT_VAL)'
+        - metavariable-regex:
+            metavariable: $TENANT_KEY
+            regex: (?i)^(company_id|org_id|tenant_id|workspace_id|project_id|account_id|user_id|owner_id)$
   - metavariable-regex:
       metavariable: $MODEL
-      regex: .*Model|.*Record
+      regex: ^[A-Z][A-Za-z0-9_]*$
   metadata:
     cwe:
     - CWE-639
@@ -80,3 +98,4 @@ rules:
     confidence: LOW
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+    provenance: POOL (miru-web 5 FIRE + 4 SILENT ideal canary; woofed-crm, sepomex)

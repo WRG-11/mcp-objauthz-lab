@@ -1,20 +1,18 @@
 # Test fixture for rule: mcp-batch-resolve-missing-per-item-scope-filter-py
 #
-# Python port of batch-resolve-missing-per-item-scope-filter.js. The JS rule
-# matches `ids.map(id => store.getNote(id))`; `.map` with an arrow has no
-# Python spelling, and the list comprehension is the idiomatic batch resolve.
+# S12 (batch/bulk endpoint BOLA). Python spelling: list comprehension
+# resolving multiple ids without per-item scope filter.
 
-
-def vuln_batch_get(store, token, ids):
-    session = resolve_session(store, token)
+def batch_resolve_vuln(ids):
     # ruleid: mcp-batch-resolve-missing-per-item-scope-filter-py
-    resolved = [store.get_note(i) for i in ids]
-    return ok(resolved)
+    return [store.get_note(f) for f in ids]
 
-
-def fixed_batch_get(store, token, ids):
-    session = resolve_session(store, token)
-    resolved = [store.get_note(i) for i in ids]
+def batch_resolve_safe(ids, session):
     # ok: mcp-batch-resolve-missing-per-item-scope-filter-py
-    scoped = [n for n in resolved if n.org_id == session.org_id]
-    return ok(scoped)
+    resolved = [store.get_note(f) for f in ids]
+    return [n for n in resolved if n.org_id == session.org_id]
+
+def batch_resolve_with_filter(ids, session):
+    # ok: mcp-batch-resolve-missing-per-item-scope-filter-py
+    resolved = [store.get_note(f) for f in ids]
+    return [n for n in resolved if n.org_id == session.org_id]

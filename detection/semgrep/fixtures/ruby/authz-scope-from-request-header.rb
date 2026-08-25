@@ -6,15 +6,30 @@
 # input as the JS sibling. The legitimate-neighbor reads a non-scope header
 # (X-Request-Id) for logging and must stay silent.
 #
-# TWO-WAY CANARY:
-# - FIRE: header value feeds an authz decision (scope/org-id selection, Note.where(org_id: headerValue))
-# - SILENT: header read ONLY for logging (no authz decision)
+# Corpus signatures (5 total, all POOL):
+# - miru-web/authenticable: request.headers["X-Auth-Email"].presence; request.headers["X-Auth-Token"] → auth
+# - miru-web/mcp_controller.rb: authorization: request.headers["Authorization"]; origin = request.headers["Origin"] → validate_origin_header!
+# - miru-web/agent/base_controller: request.headers["Authorization"].to_s.delete_prefix("Bearer ") → auth
+# - woofed-crm/internal_controller: request.headers['Authorization'] → authenticate_user
+# - miru-web/application_controller: request.headers["X-Miru-Locale"] / request.headers["Accept-Language"] (SILENT: locale)
+# - miru-web/oauth_client: request.headers["Authorization"] = "Basic #{...}" (SILENT: outbound Faraday write)
+#
+# Two-way canary axis: is the header read (inbound, for a decision) or written (outbound) /
+# read for a non-authz concern (locale, tracing, negotiation)? (write or non-authz ⇒ SILENT)
 
 # FIRE: header value used to select org scope in a model scope (authz decision)
 def note_get_scoped_vuln(token)
   session = resolve_session(token)
   # ruleid: mcp-authz-scope-from-request-header-ruby
   header_org = request.headers["x-org-id"] || session.org_id
+  Note.where(org_id: header_org)
+end
+
+# FIRE: request.headers.fetch with authz decision
+def note_get_scoped_fetch_vuln(token)
+  session = resolve_session(token)
+  # ruleid: mcp-authz-scope-from-request-header-ruby
+  header_org = request.headers.fetch("x-org-id", session.org_id)
   Note.where(org_id: header_org)
 end
 
@@ -32,6 +47,15 @@ def note_get_by_query_vuln(token, id)
   # ruleid: mcp-authz-scope-from-request-header-ruby
   header_org = request.headers["x-org-id"] || session.org_id
   Note.find_by(id: id, org_id: header_org)
+end
+
+# FIRE: Authorization header used for authentication (canonical S10)
+def authenticate_vuln(token)
+  session = resolve_session(token)
+  # ruleid: mcp-authz-scope-from-request-header-ruby
+  auth_header = request.headers["Authorization"]
+  user = User.authenticate_with_token(auth_header)
+  user
 end
 
 # OK: scope comes from the session; no header is consulted at all.
@@ -64,10 +88,30 @@ def read_header_but_dont_use(token)
   Note.where(org_id: session.org_id)
 end
 
+# SILENT: header read for locale/negotiation (X-Miru-Locale, Accept-Language)
+def log_locale
+  # ok: mcp-authz-scope-from-request-header-ruby
+  locale = request.headers["X-Miru-Locale"]
+  logger.info("locale=#{locale}")
+end
+
+# SILENT: outbound Faraday WRITE — request.headers["Authorization"] = "Basic #{...}"
+def outbound_write
+  # ok: mcp-authz-scope-from-request-header-ruby
+  request.headers["Authorization"] = "Basic #{Base64.encode64('user:pass')}"
+  Faraday.post("https://api.example.com", nil, request.headers)
+end
+
 def resolve_session(token); end
 def request; end
 def logger; end
+def current_company; Company.new; end
 class Note
   def self.where(conditions); end
   def self.find_by(conditions); end
 end
+class User
+  def self.authenticate_with_token(token); end
+end
+class Company < ActiveRecord::Base; end
+class User < ActiveRecord::Base; end

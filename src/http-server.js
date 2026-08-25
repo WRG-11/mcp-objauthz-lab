@@ -39,6 +39,8 @@ const modes = {
   s9: fixed(process.env.LAB_S9) ? "fixed" : "vuln",
   s10: fixed(process.env.LAB_S10) ? "fixed" : "vuln",
   s11: fixed(process.env.LAB_S11) ? "fixed" : "vuln",
+  s12: fixed(process.env.LAB_S12) ? "fixed" : "vuln",
+  s13: fixed(process.env.LAB_S13) ? "fixed" : "vuln",
 };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +78,6 @@ const httpServer = createServer(async (req, res) => {
 const port = Number(process.env.PORT ?? 3010);
 httpServer.listen(port, () => {
   console.error(
-    `[mcp-objauthz-lab:http] up on :${port}  S10=${modes.s10}  S11=${modes.s11}  (S1..S9 default vuln unless LAB_S* set)`,
+    `[mcp-objauthz-lab:http] up on :${port}  S10=${modes.s10}  S11=${modes.s11}  S12=${modes.s12}  S13=${modes.s13}  (S1..S9 default vuln unless LAB_S* set)`,
   );
 });

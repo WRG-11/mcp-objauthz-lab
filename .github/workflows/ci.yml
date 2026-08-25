@@ -77,11 +77,11 @@ jobs:
           node -e '
             const d = JSON.parse(require("fs").readFileSync("/tmp/semgrep-fixtures.json", "utf8"));
             const got = d.results.length;
-            const want = 60; // 21 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3).
-                             //   JS (19): mcp-wildcard-sentinel-scope-bypass
+            const want = 66; // 21 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns.
+                             //   JS (21): mcp-wildcard-sentinel-scope-bypass
                              //   no longer double-reports (hardened), and
                              //   mcp-client-supplied-scope-overrides-session has
-                             //   three vuln cases (org_id, user_id, owner_id).
+                             //   three vuln cases (org_id, user_id, owner_id) + 2 S12/S13.
                              //   Unguarded admin handlers in
                              //   admin-named-tool-missing-role-check.js and
                              //   toggle-blindness.js each carry a SECOND,
@@ -94,10 +94,11 @@ jobs:
                              //   fixed build and its no-tenant-segment sibling
                              //   both stay silent by design (session-derived
                              //   scope), so one ruleid line, not two.
-                             //   Python (12): three shared rules plus five -py
+                             //   Python (14): three shared rules plus five -py
                              //   siblings (batch, admin-tool, unscoped-query,
                              //   write-parent, ternary), plus the S8 -py
-                             //   sibling. The wildcard fixture double-report
+                             //   sibling, plus S12/S13 -py siblings.
+                             //   The wildcard fixture double-report
                              //   eliminated (hardened), and two negative cases (a
                              //   tokenizer, a glob compare) stay deliberately
                              //   silent.

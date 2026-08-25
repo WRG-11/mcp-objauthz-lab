@@ -6,21 +6,37 @@
 // input as the JS sibling. The legitimate-neighbor reads a non-scope header
 // (X-Request-Id) for logging and must stay silent.
 //
-// TWO-WAY CANARY:
-// - FIRE: header value feeds an authz decision (scope/org-id selection, listNotesByOrg(headerValue))
-// - SILENT: header read ONLY for logging (no authz decision)
+// Corpus signatures (5 total, all POOL + ECO):
+// - eugenp/tutorials: @RequestHeader("Authorization") String authHeader
+// - eugenp/tutorials: @RequestHeader("X-Conversation-ID") String conversationId → memory scope
+// - eugenp/tutorials: @RequestHeader(CLIENT_ID_HEADER) String clientId → Concurrency.protect scope
+// - apache/dubbo: @Activate(onClass="RequestHeader") framework confirmation
+// - jakarta.servlet.http.HttpServletRequest.getHeader(...) via eugenp requestheader/*
+//
+// Two-way canary axis: is the header read (inbound, for a decision) or written (outbound) /
+// read for a non-authz concern (locale, tracing, negotiation)? (write or non-authz ⇒ SILENT)
 
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-// FIRE: header value used to select org scope in a repository call (authz decision)
+// FIRE: @RequestHeader("X-Org-Id") String org → tenantScope(org) / used in access decision
 public Mono<Note> noteGetScopedVuln(ServerWebExchange exchange, String token) {
     Session session = resolveSession(token);
     // ruleid: mcp-authz-scope-from-request-header-java
-    String headerOrg = exchange.getRequest().getHeaders().getFirst("x-org-id") != null 
-        ? exchange.getRequest().getHeaders().getFirst("x-org-id") 
+    String headerOrg = exchange.getRequest().getHeaders().getFirst("x-org-id") != null
+        ? exchange.getRequest().getHeaders().getFirst("x-org-id")
         : session.getOrgId();
     return repo.listNotesByOrg(headerOrg);
+}
+
+// FIRE: @RequestHeader annotation form with authz decision
+public Mono<Note> noteGetScopedAnnotationVuln(
+        @RequestHeader("X-Org-Id") String orgId,
+        String token) {
+    Session session = resolveSession(token);
+    // ruleid: mcp-authz-scope-from-request-header-java
+    String effectiveOrgId = orgId != null ? orgId : session.getOrgId();
+    return repo.listNotesByOrg(effectiveOrgId);
 }
 
 // FIRE (IP-scoping variant): X-Forwarded-For used to select client IP scope
@@ -73,7 +89,14 @@ public Mono<Note> readHeaderButDontUse(ServerWebExchange exchange, String token)
     return repo.listNotesByOrg(session.getOrgId());
 }
 
-class Session { 
+// SILENT: header read for locale/negotiation (Accept-Language, User-Agent)
+public void logLocale(ServerWebExchange exchange) {
+    // ok: mcp-authz-scope-from-request-header-java
+    String locale = exchange.getRequest().getHeaders().getFirst("accept-language");
+    logger.info("locale={}", locale);
+}
+
+class Session {
     String getOrgId() { return ""; }
     String getClientIp() { return ""; }
 }

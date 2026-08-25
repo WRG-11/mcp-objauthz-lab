@@ -6,23 +6,33 @@ rules:
   message: A Laravel/Symfony MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to an Eloquent query, binds it as org_id in a where clause). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
   patterns:
   - pattern-either:
-    - pattern: $request->header($HDR)
-    - pattern: $request->headers->get($HDR)
+      - pattern: $request->header($HDR)
+      - pattern: $request->headers->get($HDR)
+      - pattern: $request->getHeaderLine($HDR)
+      - pattern: $request->hasHeader($HDR)
+      - pattern: $_SERVER[$HDR]
   - metavariable-regex:
       metavariable: $HDR
       regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern: $MODEL::$METHOD(..., $hdrval, ...)
+  - pattern-either:
+      - pattern: $MODEL::$METHOD(..., $hdrval, ...)
+      - pattern: $MODEL::where($KEY, $hdrval)->...
+      - pattern: $MODEL::where($KEY, $hdrval, ...)->...
   - metavariable-regex:
       metavariable: $METHOD
       regex: (?i)^(where|find|findOrFail|first|get|select|all).*
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
   metadata:
     cwe:
     - CWE-639
     - CWE-290
     category: security
-    confidence: MEDIUM
+    confidence: LOW
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+    provenance: POOL (processwire-mcp requireAuth) + ECO (PSR-7); LOW CONFIDENCE - PHP pool uses Contao/ProcessWire not Eloquent; recommend taint (header-source -> auth-sink) not bare presence
 
 - id: mcp-wildcard-sentinel-scope-bypass-php
   languages:
@@ -31,28 +41,28 @@ rules:
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
   patterns:
   - pattern-either:
-    - pattern: $PARAM === "*"
-    - pattern: $PARAM === "all"
-    - pattern: '"*" === $PARAM'
-    - pattern: '"all" === $PARAM'
+      - pattern: $PARAM === "*"
+      - pattern: $PARAM === "all"
+      - pattern: '"*" === $PARAM'
+      - pattern: '"all" === $PARAM'
   - metavariable-regex:
       metavariable: $PARAM
       regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
   - pattern-either:
-    - pattern: |
-        if ($PARAM === "*") {
-          ...
-          $MODEL::$METHOD(...);
-          ...
-        }
-    - pattern: |
-        if ($PARAM === "all") {
-          ...
-          $MODEL::$METHOD(...);
-          ...
-        }
-    - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
+      - pattern: |
+          if ($PARAM === "*") {
+            ...
+            $MODEL::$METHOD(...);
+            ...
+          }
+      - pattern: |
+          if ($PARAM === "all") {
+            ...
+            $MODEL::$METHOD(...);
+            ...
+          }
+      - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
+      - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
   metadata:
     cwe:
     - CWE-639
@@ -68,9 +78,22 @@ rules:
   message: An object is fetched by id through a query that carries no tenant key (workspace_id / org_id / tenant_id / project_id ...), or fetched straight by primary key. If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
   patterns:
   - pattern-either:
-    - pattern: $MODEL::find($ID)
-    - pattern: $MODEL::where('id', $ID)->first()
-    - pattern: $MODEL::destroy($ID)
+      - pattern: $MODEL::find($ID)
+      - pattern: $MODEL::findOrFail($ID)
+      - pattern: $MODEL::findByPk($ID)
+      - pattern: $MODEL::findBy($COLS, $VALS)
+      - pattern: $REPO->find($ID)
+      - pattern: $MODEL::where('id', $ID)->first()
+      - pattern: $MODEL::destroy($ID)
+  - pattern-not:
+      patterns:
+        - pattern-either:
+            - pattern: '$MODEL::findOneBy([..., "$TENANT" => $T, ...])'
+            - pattern: '$MODEL::where(..., $TENANT, ...)->first()'
+            - pattern: '$REPO->find($ID, $TENANT)'
+        - metavariable-regex:
+            metavariable: $TENANT
+            regex: (?i)^(tenant_id|org_id|workspace_id|project_id|account_id|user_id|owner_id)$
   - metavariable-regex:
       metavariable: $MODEL
       regex: .*Model|.*Eloquent
@@ -81,3 +104,4 @@ rules:
     confidence: LOW
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+    provenance: "POOL (Contao/ProcessWire) + ECO (Eloquent); NOTE: PHP MCP pool uses Contao Models (Model::findBy) and ProcessWire selectors, NOT Laravel Eloquent - Eloquent confirmed only in ecosystem"

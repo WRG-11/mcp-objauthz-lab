@@ -6,15 +6,22 @@ rules:
   message: A Spring/WebFlux MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to a repository list call, binds it as orgId in a query). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
   patterns:
   - pattern-either:
-    - pattern: $REQ.getHeader($HDR)
-    - pattern: $REQ.getHeaders().getFirst($HDR)
+      - pattern: $REQ.getHeader($HDR)
+      - pattern: $REQ.getHeaders().getFirst($HDR)
+      - pattern: '@RequestHeader($HDR) String $HDRVAL'
+      - pattern: '@RequestHeader(name = $HDR) String $HDRVAL'
+      - pattern: '@RequestHeader(value = $HDR) String $HDRVAL'
   - metavariable-regex:
       metavariable: $HDR
       regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
+  - pattern-either:
+      - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
   - metavariable-regex:
       metavariable: $METHOD
       regex: (?i)^(list|find|get|search|query|select|findAll|findBy).*
+  - metavariable-regex:
+      metavariable: $KEY
+      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
   metadata:
     cwe:
     - CWE-639
@@ -23,6 +30,7 @@ rules:
     confidence: MEDIUM
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
+    provenance: POOL (eugenp/tutorials, apache/dubbo) + ECO
 
 - id: mcp-wildcard-sentinel-scope-bypass-java
   languages:
@@ -31,28 +39,28 @@ rules:
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
   patterns:
   - pattern-either:
-    - pattern: $PARAM.equals("*")
-    - pattern: $PARAM.equals("all")
-    - pattern: '"all".equals($PARAM)'
-    - pattern: '"*".equals($PARAM)'
+      - pattern: $PARAM.equals("*")
+      - pattern: $PARAM.equals("all")
+      - pattern: '"all".equals($PARAM)'
+      - pattern: '"*".equals($PARAM)'
   - metavariable-regex:
       metavariable: $PARAM
       regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
   - pattern-either:
-    - pattern: |
-        if ($PARAM.equals("*")) {
-          ...
-          $REPO.$METHOD(...);
-          ...
-        }
-    - pattern: |
-        if ($PARAM.equals("all")) {
-          ...
-          $REPO.$METHOD(...);
-          ...
-        }
-    - pattern: '$PARAM.equals("*") ? $WIDE : $SCOPED'
-    - pattern: '$PARAM.equals("all") ? $WIDE : $SCOPED'
+      - pattern: |
+          if ($PARAM.equals("*")) {
+            ...
+            $REPO.$METHOD(...);
+            ...
+          }
+      - pattern: |
+          if ($PARAM.equals("all")) {
+            ...
+            $REPO.$METHOD(...);
+            ...
+          }
+      - pattern: '$PARAM.equals("*") ? $WIDE : $SCOPED'
+      - pattern: '$PARAM.equals("all") ? $WIDE : $SCOPED'
   metadata:
     cwe:
     - CWE-639
@@ -68,13 +76,14 @@ rules:
   message: An object is fetched by id through a query filter that carries no tenant key (workspaceId / projectId / organizationId / orgId / tenantId / accountId / userId / ownerId). If the entity is multi-tenant, the query matches on id alone and any caller's id resolves regardless of tenant -- the query-scoped form of object-level authorization failure (BOLA / IDOR, CWE-639). Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
   patterns:
   - pattern-either:
-    - pattern: $REPO.findById($ID)
-    - pattern: $REPO.findOneById($ID)
-    - pattern: $REPO.getById($ID)
-    - pattern: $REPO.deleteById($ID)
+      - pattern: $REPO.findById($ID)
+      - pattern: $REPO.getReferenceById($ID)
+      - pattern: $REPO.getById($ID)
+      - pattern: $REPO.deleteById($ID)
+      - pattern: $REPO.findOneById($ID)
   - metavariable-regex:
       metavariable: $REPO
-      regex: .*Repository
+      regex: .*Repository|.*Dao|.*Jpa
   metadata:
     cwe:
     - CWE-639
@@ -82,3 +91,4 @@ rules:
     confidence: LOW
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+    provenance: "POOL (eugenp/tutorials) + ECO (Baeldung, axelor); NOTE: Java MCP servers in pool use driver/Cypher/JDBC not Spring-Data - JPA provenance is from ecosystem, not DB MCP servers"

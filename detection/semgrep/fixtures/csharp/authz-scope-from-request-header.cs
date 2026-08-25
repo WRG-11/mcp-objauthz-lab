@@ -6,19 +6,36 @@
 // input as the JS sibling. The legitimate-neighbor reads a non-scope header
 // (X-Request-Id) for logging and must stay silent.
 //
-// TWO-WAY CANARY:
-// - FIRE: header value feeds an authz decision (scope/org-id selection, _repo.Where(n => n.OrgId == headerValue))
-// - SILENT: header read ONLY for logging (no authz decision)
+// Corpus signatures (5 total, all POOL - TrashMobMCP, TrashMob):
+// - TrashMobMCP/ApiKeyAuthMiddleware: context.Request.Headers.TryGetValue(ApiKeyHeaderName, out var headerValue) → auth
+// - TrashMob/ChannelKeyAuthenticationFilter: context.HttpContext.Request.Headers.TryGetValue("IFTTT-Channel-Key", out var iftttChannelKeyRequest) → auth
+// - TrashMob/WaiversV2Controller: Request.Headers["X-Forwarded-For"].ToString() → spoofable header in decision
+// - TrashMob/CorrelationIdMiddleware: context.Request.Headers[CorrelationIdHeader].ToString() (SILENT: tracing)
+// - TrashMob/PrivoApiKeyAuthenticationFilter: context.HttpContext.Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeader) → auth
+//
+// Two-way canary axis: is the header read (inbound, for a decision) or written (outbound) /
+// read for a non-authz concern (locale, tracing, negotiation)? (write or non-authz ⇒ SILENT)
 
 using Microsoft.AspNetCore.Http;
 using System.Threading.Tasks;
 
-// FIRE: header value used to select org scope in an EF Core query (authz decision)
+// FIRE: Request.Headers["X-Forwarded-For"] / .TryGetValue(ApiKeyHeaderName, ...) used to authenticate/scope
 public async Task<IEnumerable<Note>> NoteGetScopedVuln(HttpRequest request, string token) {
     var session = ResolveSession(token);
     // ruleid: mcp-authz-scope-from-request-header-csharp
     var headerOrg = request.Headers["x-org-id"].FirstOrDefault() ?? session.OrgId;
     return await _repo.Notes.Where(n => n.OrgId == headerOrg).ToListAsync();
+}
+
+// FIRE: TryGetValue with authz decision
+public async Task<IEnumerable<Note>> NoteGetScopedTryGetValueVuln(HttpRequest request, string token) {
+    var session = ResolveSession(token);
+    // ruleid: mcp-authz-scope-from-request-header-csharp
+    if (request.Headers.TryGetValue("X-Org-Id", out var headerOrgVal)) {
+        var headerOrg = headerOrgVal.FirstOrDefault();
+        return await _repo.Notes.Where(n => n.OrgId == headerOrg).ToListAsync();
+    }
+    return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
 }
 
 // FIRE (IP-scoping variant): X-Forwarded-For used to select client IP scope
@@ -67,10 +84,25 @@ public async Task<IEnumerable<Note>> ReadHeaderButDontUse(HttpRequest request, s
     return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
 }
 
+// SILENT: outbound write on HttpRequestMessage — request.Headers.Add("Accept", ...) / request.Headers.Authorization = ...
+public void OutboundWrite(System.Net.Http.HttpRequestMessage request) {
+    // ok: mcp-authz-scope-from-request-header-csharp
+    request.Headers.Add("Accept", "application/json");
+    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "token");
+}
+
+// SILENT: header read for tracing (User-Agent, X-Correlation-ID)
+public void LogTracing(HttpRequest request) {
+    // ok: mcp-authz-scope-from-request-header-csharp
+    var ua = request.Headers["User-Agent"].FirstOrDefault();
+    var corr = request.Headers["X-Correlation-ID"].FirstOrDefault();
+    _logger.LogInformation("ua={UA} corr={Corr}", ua, corr);
+}
+
 class Session { public string OrgId { get; set; } = ""; public string ClientIp { get; set; } = ""; }
 class Note { public string Id { get; set; } = ""; public string OrgId { get; set; } = ""; public string ClientIp { get; set; } = ""; }
 interface IRepository { 
-    DbSet<Note> Notes { get; }
+    System.Collections.Generic.IEnumerable<Note> Notes { get; }
 }
 interface ILogger { void LogInformation(string message, params object[] args); }
 

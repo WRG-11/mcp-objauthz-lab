@@ -10,8 +10,8 @@
 > [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
 > Context Protocol tools, and how to hunt them.
 
-It is a multi-tenant note server exposing sixteen MCP tools and one MCP resource
-across **eleven independent BOLA scenarios**. Each scenario is a different variant
+It is a multi-tenant note server exposing eighteen MCP tools and one MCP resource
+across **thirteen independent BOLA scenarios**. Each scenario is a different variant
 of the same bug class, toggled by its own environment variable. Run them all at
 once or isolate one at a time.
 
@@ -56,6 +56,8 @@ until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 | [S9](challenges/s9.md) | Authz-from-client-round-tripped-value — an editable share grant |
 | [S10](challenges/s10.md) | Forwarded-header-as-scope — a trusted request header (HTTP transport) |
 | [S11](challenges/s11.md) | X-Forwarded-For quota bypass — a trusted request header for rate limiting (HTTP transport) |
+| [S12](challenges/s12.md) | Batch/bulk endpoint BOLA — multi-object endpoint without per-item tenant filter |
+| [S13](challenges/s13.md) | JWT/token scope confusion — token's scope/aud claim vs actual permissions mismatch |
 
 ## Quickstart (< 5 minutes)
 
@@ -67,10 +69,10 @@ npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
 npm run poc # 28-row two-way gate — the tools/resources wired end-to-end over MCP
 ```
 
-Expected `npm run poc` output (28/28 rows, all scenarios + the hardened build):
+Expected `npm run poc` output (34/34 rows, all scenarios + the hardened build):
 
 ```
-MCP object-level authorization lab — two-way gate (11 scenarios + hardened build)
+MCP object-level authorization lab — two-way gate (13 scenarios + hardened build)
 
   SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
   S1   vuln   note_get    cross-tenant (Bob→Acme)            DENIED    DENIED    ✓
@@ -101,10 +103,14 @@ MCP object-level authorization lab — two-way gate (11 scenarios + hardened bui
   S11  vuln   note_create_limited X-Forwarded-For=5.6.7.8    BYPASS    BYPASS    ✓
   S11  fixed  note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
   S11  fixed  note_create_limited X-Forwarded-For=5.6.7.8    BLOCKED   BLOCKED   ✓
-  ALL  fixed  12 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
+  S12  vuln   note_batch_resolve batch with Globex id (Alice) LEAKED    LEAKED    ✓
+  S12  fixed  note_batch_resolve batch with Globex id (Alice) SCOPED    SCOPED    ✓
+  S13  vuln   note_get_by_token_scope scope=org_globex (Alice) LEAKED    LEAKED    ✓
+  S13  fixed  note_get_by_token_scope scope=org_globex (Alice) SCOPED    SCOPED    ✓
+  ALL  fixed  14 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
-  Two-way gate: PASS (28/28 rows OK)
+  Two-way gate: PASS (34/34 rows OK)
 ```
 
 The PoC is a real MCP client. It spawns the server over stdio (**locally — no
@@ -577,21 +583,23 @@ Each scenario is controlled by an independent env var (all default to `"vuln"`):
 | `LAB_S9` | S9 — `note_share_redeem` | decoded grant's `noteId` trusted with no session re-check | `requireOrgAccess()` re-checked against the resolved note |
 | `LAB_S10` | S10 — `note_get_scoped` | `X-Org-Id` header trusted as scope (HTTP) | Header ignored; session scope always used |
 | `LAB_S11` | S11 — `note_create_limited` | `X-Forwarded-For` header as quota key (HTTP) | Quota keyed to session; header ignored |
+| `LAB_S12` | S12 — `note_batch_resolve` | Batch returns all resolved notes regardless of org | Each resolved note filtered to `session.orgId` |
+| `LAB_S13` | S13 — `note_get_by_token_scope` | Token's scope/aud claim trusted as scope | Scope claim ignored; session scope always used |
 
 Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
-LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed npm start
+LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed LAB_S12=fixed LAB_S13=fixed npm start
 
 # Windows PowerShell
-$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; $env:LAB_S10='fixed'; $env:LAB_S11='fixed'; npm start
+$env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; $env:LAB_S10='fixed'; $env:LAB_S11='fixed'; $env:LAB_S12='fixed'; $env:LAB_S13='fixed'; npm start
 ```
 
 Isolate one scenario (e.g. test only S2):
 
 ```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed npm start
+LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed LAB_S12=fixed LAB_S13=fixed npm start
 ```
 
 ---

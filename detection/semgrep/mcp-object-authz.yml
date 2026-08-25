@@ -1131,3 +1131,91 @@ rules:
     confidence: MEDIUM
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s11--xff-quota-bypass
+- id: mcp-batch-resolve-missing-per-item-scope-filter
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: "Multiple objects are resolved by client-supplied ids in a batch, but the surrounding code has no per-item scope filter (e.g. a \".filter(n => n.orgId === session.orgId)\" afterward). A sibling list() tool is often correctly scoped while its batch-get sibling skips the per-object check — the \"list->get asymmetry\" pattern. CWE-862 — see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s12--batch-bulk-endpoint-bola"
+  patterns:
+  - pattern: $IDS.map($F => $STORE.$METHOD($F))
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(get|find).*
+  - metavariable-regex:
+      metavariable: $STORE
+      regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+  - pattern-not-inside: '$RESOLVED = $IDS.map($F => $STORE.$METHOD($F)); ... $RESOLVED.filter(...);'
+  metadata:
+    cwe:
+    - CWE-862
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s12--batch-bulk-endpoint-bola
+
+- id: mcp-batch-resolve-missing-per-item-scope-filter-py
+  languages:
+  - python
+  severity: WARNING
+  message: 'Multiple objects are resolved by client-supplied ids in a batch comprehension, but the surrounding code applies no per-item scope filter back to the caller''s own scope (the list->get asymmetry, CWE-862). Filter resolved items by the session''s scope before returning them. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s12--batch-bulk-endpoint-bola'
+  patterns:
+  - pattern: $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (?i)^(get|find).*
+  - metavariable-regex:
+      metavariable: $STORE
+      regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+  - pattern-not: $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+  metadata:
+    cwe:
+    - CWE-862
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s12--batch-bulk-endpoint-bola
+
+- id: mcp-client-supplied-scope-overrides-session
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: "A client-supplied scope or identity argument can override the server-trusted session scope. Arguments like org_id/tenant_id/ project_id/user_id/owner_id/scope/aud must never select whose data a tool operates on — always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 — see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion"
+  patterns:
+  - pattern-either:
+      - pattern: '$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD'
+      - pattern: '$SCOPEPARAM ?? $SESSION.$FIELD'
+      - pattern: '$SCOPEPARAM || $SESSION.$FIELD'
+  - metavariable-regex:
+      metavariable: $SCOPEPARAM
+      regex: (?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid|scope|aud)$
+  - pattern-not-inside: 'requireOrgAccess(...); ...'
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion
+
+- id: mcp-client-supplied-scope-overrides-session-py-ternary
+  languages:
+  - python
+  severity: ERROR
+  message: "A client-supplied scope or identity argument can override the server-trusted session scope (Python ternary spelling). Arguments like org_id/tenant_id/ project_id/user_id/owner_id/scope/aud must never select whose data a tool operates on — always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 — see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion"
+  patterns:
+  - pattern-either:
+      - pattern: '$SCOPEPARAM if $SCOPEPARAM else $SESSION.$FIELD'
+      - pattern: '$SCOPEPARAM if $SCOPEPARAM is not None else $SESSION.$FIELD'
+  - metavariable-regex:
+      metavariable: $SCOPEPARAM
+      regex: (?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid|scope|aud)$
+  - pattern-not-inside: 'require_org_access(...); ...'
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion

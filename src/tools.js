@@ -74,7 +74,7 @@ const notFound = (id) => {
  * Register every tool on the server.
  * @param {import("@modelcontextprotocol/sdk/server/mcp.js").McpServer} server
  * @param {ReturnType<import("./store.js").createStore>} store
- * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed", s5: "vuln"|"fixed", s6: "vuln"|"fixed", s7: "vuln"|"fixed", s8: "vuln"|"fixed", s9: "vuln"|"fixed" }} modes
+ * @param {{ s1: "vuln"|"fixed", s2: "vuln"|"fixed", s3: "vuln"|"fixed", s4: "vuln"|"fixed", s5: "vuln"|"fixed", s6: "vuln"|"fixed", s7: "vuln"|"fixed", s8: "vuln"|"fixed", s9: "vuln"|"fixed", s10: "vuln"|"fixed", s11: "vuln"|"fixed", s12: "vuln"|"fixed", s13: "vuln"|"fixed" }} modes
  */
 export function registerTools(server, store, modes) {
   // whoami — echoes the server-trusted session (handy to verify token → org mapping).
@@ -596,6 +596,76 @@ export function registerTools(server, store, modes) {
       });
       store.incrementQuota(quotaKey);
       return ok(note);
+    }),
+  );
+
+  // ── S12: note_batch_resolve ──────────────────────────────────────────────────
+  // BATCH/BULK ENDPOINT BOLA (CWE-639 / CWE-862) — multi-object endpoint without per-item tenant filter.
+  //
+  // Completes the single-object scenarios (S1-S7) by showing the same bug at batch scale.
+  // A list/batch endpoint returns multiple objects by id, but skips the per-item org check.
+  // An attacker who knows ids from another org can include them in the batch and receive them.
+  // This is the "list→get asymmetry" pattern at batch scale — very common in real MCP servers.
+  //
+  //   Exploit: Alice (org Acme) calls note_batch_resolve with ids ["n_acme_1", "n_globex_1"]
+  //            In vuln mode both are returned; she reads Globex's note.
+  //
+  // In fixed mode resolved notes are filtered to session.orgId before returning.
+  server.registerTool(
+    "note_batch_resolve",
+    {
+      description:
+        "Fetch multiple notes by id in a single batch call (up to 50 ids). Returns all requested notes.",
+      inputSchema: {
+        token: z.string(),
+        ids: z.array(z.string()).min(1).max(50),
+      },
+    },
+    guard(async ({ token, ids }) => {
+      const session = resolveSession(store, token);
+      const resolved = ids.map((id) => store.getNote(id)).filter(Boolean);
+      // S12 vuln: return all resolved notes with no per-item org check.
+      // S12 fixed: filter each resolved note to caller's org before returning.
+      const result =
+        modes.s12 === "vuln"
+          ? resolved
+          : resolved.filter((n) => n.orgId === session.orgId);
+      return ok(result);
+    }),
+  );
+
+  // ── S13: note_get_by_token_scope ──────────────────────────────────────────────
+  // JWT/TOKEN SCOPE CONFUSION (CWE-639 / CWE-290) — scope claim in token vs actual permissions mismatch.
+  //
+  // MCP auth layer trusts a scope/aud claim inside the token (JWT or opaque) to select tenant scope,
+  // but the token's scope claim may not match the caller's actual permissions (scope confusion).
+  // This is MCP-specific: the token is presented per-call, and a malicious or misconfigured client
+  // can present a token with an inflated scope claim that the server trusts without re-verifying
+  // against the session/identity provider.
+  //
+  //   Exploit: Alice (org Acme) presents a token with scope="org_globex" (or aud="org_globex")
+  //            In vuln mode the server trusts the token's scope claim and returns Globex's notes.
+  //
+  // In fixed mode the server derives scope from the resolved session (server-trusted), ignoring
+  // any scope/aud claim carried in the token itself. The token authenticates *who you are*; the
+  // session determines *what you may access*.
+  server.registerTool(
+    "note_get_by_token_scope",
+    {
+      description:
+        "Get notes for the organization indicated by the token's scope claim. The token carries the intended scope.",
+      inputSchema: {
+        token: z.string(),
+        scope: z.string().optional().describe("Optional scope override from token claims (aud/scope)"),
+      },
+    },
+    guard(async ({ token, scope }) => {
+      const session = resolveSession(store, token);
+      // S13 vuln: trust the caller-supplied scope claim (from token's aud/scope) as the authorization scope.
+      // S13 fixed: always use session.orgId (server-trusted); ignore token's scope claim.
+      const effectiveOrgId =
+        modes.s13 === "vuln" && scope ? scope : session.orgId;
+      return ok(store.listNotesByOrg(effectiveOrgId));
     }),
   );
 }
