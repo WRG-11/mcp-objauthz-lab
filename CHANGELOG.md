@@ -4,6 +4,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] — 2026-08-25
+
+### Added
+
+- **Scenario S12 — Batch/bulk endpoint BOLA** (CWE-639 / CWE-862): new
+  `note_batch_resolve` tool resolves a batch of note ids without a per-item
+  org-scope filter — the "list→get asymmetry" at batch scale. Semgrep rule
+  `mcp-batch-resolve-missing-per-item-scope-filter` (+ `-py`).
+- **Scenario S13 — JWT/token scope confusion** (CWE-290): new
+  `note_get_by_token_scope` tool trusts a caller-supplied `scope`/`aud`
+  parameter as the authorization scope. Extended
+  `mcp-client-supplied-scope-overrides-session` (+ `-py-ternary`) to cover it.
+- **Real-capture corpus signatures for five languages** (Java, C#, Ruby, PHP,
+  Kotlin) replacing the earlier placeholder S7/S10 patterns — drawn from public
+  MCP-SDK / framework source. Kotlin S10 (`KtorServer.kt` header → transport) is
+  the canonical cell; Ruby is an ideal same-repo FIRE/SILENT canary; PHP S10 is
+  lowered to a documented taint recommendation (header-source → auth-sink).
+
+### Changed
+
+- Now **13 scenarios** (S1–S13), **18 tools** + 1 resource, **40 detection
+  rules** across the `detection/semgrep/` directory (JS/TS + Python siblings +
+  Go, Rust, Kotlin, Java, Ruby, PHP, C#, Swift language packs).
+- CI fixture-finding count: **42 → 66**.
+- PoC two-way gate: **38/38 rows** (13 scenarios + hardened build); unit tests: **51**.
+- `SECURITY.md`: **13 planted flaws** (S1–S13).
+
 ## [3.8.1] — 2026-08-25
 
 ### Fixed

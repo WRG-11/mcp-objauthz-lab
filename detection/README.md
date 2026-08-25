@@ -8,9 +8,9 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 16
-[Semgrep](https://semgrep.dev) rules covering the shapes from the eleven lab
-scenarios. Ten of the sixteen run against **Python as well as
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 22
+[Semgrep](https://semgrep.dev) rules covering the shapes from the thirteen lab
+scenarios. Ten of the twenty-two run against **Python as well as
 JavaScript/TypeScript**: four shared rules declare both, and six `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
 (`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **40 rules across the `detection/semgrep/` directory** — the table lists all of them:
@@ -191,8 +191,9 @@ correctness bar every rule was iterated against.
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **7 of 9 scenarios flagged (S2, S3, S4, S6, S7, S8, S9).
-S1 and S5 are missed.**
+ruleset against it: **7 of 13 scenarios flagged (S1, S2, S6, S7, S8, S12,
+S13). S3-S5 and S9-S11 are missed** — the toggle-gated handlers plus S10/S11's
+transport-header shape, which the JS rules match only in the language packs.
 
 S9 has no dedicated rule. Measured before deciding that: `mcp-missing-
 object-authz-check` (S1's rule) already fires on `note_share_redeem`'s vuln
