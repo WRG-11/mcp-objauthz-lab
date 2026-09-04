@@ -67,6 +67,7 @@ Requirements: **Node.js ≥ 20**.
 npm install
 npm test    # 52 tests — auth.js/store.js in isolation, plus docs-consistency
 npm run poc # 38-row two-way gate — the tools/resources wired end-to-end over MCP
+npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```
 
 Expected `npm run poc` output (38/38 rows, all scenarios + the hardened build):
@@ -123,6 +124,11 @@ The PoC is a real MCP client. It spawns the server over stdio (**locally — no
 network, no third party**) and runs a *two-way gate* per scenario: in the **vuln**
 build the exploit succeeds; in the **fixed** build it is blocked and legitimate
 same-org access still works (no false positive).
+
+`--json-output` writes the structured evidence contract used by the optional
+toolkit adapter. `--sarif-output` writes only observed vulnerability outcomes
+from the intentionally vulnerable build; fixed controls and expected denials
+are not emitted as findings.
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
