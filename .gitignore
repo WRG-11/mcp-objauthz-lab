@@ -8,3 +8,12 @@ artifacts/
 WRG_BRIEF*.md
 WRG_DONE*.md
 WRG_*.md
+
+# PoC output. README documents exactly these two filenames
+# (`npm run poc -- --json-output poc-chain-evidence.json --sarif-output
+# poc-chain-evidence.sarif`), so anyone following the README produces them --
+# they are a run artefact, not a deliverable, and neither was tracked nor
+# ignored until now, which is one `git add -A` away from publishing them.
+poc-chain-evidence.json
+poc-chain-evidence.sarif
+.npm-cache/

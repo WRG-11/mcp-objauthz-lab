@@ -4,6 +4,36 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] — 2026-09-05
+
+The PoC's findings become machine-readable: an authorization **chain** is now
+emitted as structured evidence and exported as SARIF, so a finding carries the
+sequence that produced it rather than just the endpoint that failed.
+
+### Added
+
+- **Authorization-chain events.** The PoC emits each step of an authorization
+  decision, so a finding can be read as a sequence (which call, with whose
+  token, resolving which object) instead of a single endpoint verdict.
+- **MCP chain-event identification** — chain events are tagged with the MCP
+  operation that produced them, which is what makes a multi-step finding
+  attributable rather than merely observed.
+- **Machine-readable evidence export** (`--json-output`) and **SARIF export**
+  (`--sarif-output`), so a lab run can feed a code-scanning pipeline or any
+  SARIF viewer. README documents both flags.
+
+### Changed
+
+- Lab test and PoC output counts re-synced with what the code actually
+  produces; `test/docs-consistency.test.js` keeps that claim mechanical rather
+  than hand-maintained.
+
+### Note
+
+These shipped in #38 but only reached the counter line of `[3.10.0]`; the
+features themselves were never described in a changelog entry and the version
+did not move. This section is that entry, and `package.json` moves with it.
+
 ## [3.10.0] — 2026-08-25
 
 ### Added
