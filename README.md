@@ -65,8 +65,9 @@ Requirements: **Node.js ≥ 20**.
 
 ```bash
 npm install
-npm test    # 51 tests — auth.js/store.js in isolation, plus docs-consistency
+npm test    # 52 tests — auth.js/store.js in isolation, plus docs-consistency
 npm run poc # 38-row two-way gate — the tools/resources wired end-to-end over MCP
+npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```
 
 Expected `npm run poc` output (38/38 rows, all scenarios + the hardened build):
@@ -99,10 +100,16 @@ MCP object-level authorization lab — two-way gate (13 scenarios + hardened bui
   S9   fixed  note_share_redeem own grant     (Alice→Acme)   ALLOWED   ALLOWED   ✓
   S10  vuln   note_get_scoped X-Org-Id=org_globex (Alice over HTTP) LEAKED    LEAKED    ✓
   S10  fixed  note_get_scoped X-Org-Id=org_globex (Alice over HTTP) SCOPED    SCOPED    ✓
-  S11  vuln   note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
-  S11  vuln   note_create_limited X-Forwarded-For=5.6.7.8    BYPASS    BYPASS    ✓
-  S11  fixed  note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
-  S11  fixed  note_create_limited X-Forwarded-For=5.6.7.8    BLOCKED   BLOCKED   ✓
+   S11  vuln   note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
+   S11  vuln   note_create_limited quota key is 1.2.3.4       MATCH     MATCH     ✓
+   S11  vuln   note_create_limited X-Forwarded-For=5.6.7.8    BYPASS    BYPASS    ✓
+   S11  vuln   note_create_limited fresh server XFF=5.6.7.8 (quota key logic) CREATED   CREATED   ✓
+   S11  vuln   note_create_limited quota exhausted XFF=5.6.7.8 BLOCKED   BLOCKED   ✓
+   S11  fixed  note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
+   S11  fixed  note_create_limited quota key is u_alice       MATCH     MATCH     ✓
+   S11  fixed  note_create_limited X-Forwarded-For=5.6.7.8    BLOCKED   BLOCKED   ✓
+   S11  fixed  note_create_limited fresh server XFF=5.6.7.8 (quota key logic) CREATED   CREATED   ✓
+   S11  fixed  note_create_limited quota exhausted XFF=5.6.7.8 BLOCKED   BLOCKED   ✓
   S12  vuln   note_batch_resolve batch with Globex id (Alice) LEAKED    LEAKED    ✓
   S12  fixed  note_batch_resolve batch with Globex id (Alice) SCOPED    SCOPED    ✓
   S13  vuln   note_get_by_token_scope scope=org_globex (Alice) LEAKED    LEAKED    ✓
@@ -117,6 +124,11 @@ The PoC is a real MCP client. It spawns the server over stdio (**locally — no
 network, no third party**) and runs a *two-way gate* per scenario: in the **vuln**
 build the exploit succeeds; in the **fixed** build it is blocked and legitimate
 same-org access still works (no false positive).
+
+`--json-output` writes the structured evidence contract used by the optional
+toolkit adapter. `--sarif-output` writes only observed vulnerability outcomes
+from the intentionally vulnerable build; fixed controls and expected denials
+are not emitted as findings.
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
@@ -560,7 +572,7 @@ steps:
 | [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S13` env vars, passes a `modes` object to `registerTools`. |
 | [`src/http-server.js`](src/http-server.js) | Streamable-HTTP MCP server (for S10/S11). Same tools/store, transports headers via `extra.requestInfo.headers`. |
 | [`poc/exploit.js`](poc/exploit.js) | MCP client running the 38-row two-way gate: all 13 scenarios in isolation, plus the all-`fixed` hardened build. |
-| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (51 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
+| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (52 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
 the server resolves to a fixed user, org, and role. The caller never asserts its

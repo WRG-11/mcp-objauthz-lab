@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rules** across the `detection/semgrep/` directory (JS/TS + Python siblings +
   Go, Rust, Kotlin, Java, Ruby, PHP, C#, Swift language packs).
 - CI fixture-finding count: **42 → 66**.
-- PoC two-way gate: **38/38 rows** (13 scenarios + hardened build); unit tests: **51**.
+- PoC two-way gate: **38/38 rows** (13 scenarios + hardened build); unit tests: **52**.
 - `SECURITY.md`: **13 planted flaws** (S1–S13).
 
 ## [3.8.1] — 2026-08-25
