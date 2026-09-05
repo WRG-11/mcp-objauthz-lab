@@ -502,11 +502,11 @@ header. See [`challenges/s10.md`](challenges/s10.md).
 
 ## Detection rules — automate the hunt
 
-[`detection/`](detection/README.md) ships 40 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 46 [Semgrep](https://semgrep.dev)
 rules — one per code shape above, with Python siblings where the JavaScript
 spelling cannot parse as Python, plus Go, Rust, Kotlin, Java, Ruby, PHP, C#,
 and Swift language packs — that flag these patterns in **your own**
-MCP server source, not just this lab's. **Ten of them run against
+MCP server source, not just this lab's. **Eleven of them run against
 Python as well as JavaScript/TypeScript**, which matters because the
 reference MCP SDKs ship in both.
 

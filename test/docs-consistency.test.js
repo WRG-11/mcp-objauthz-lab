@@ -151,7 +151,13 @@ test("stated tool count matches the tools actually registered", () => {
 test("detection README lists every rule id in the ruleset", () => {
   const rules = readdirSync(join(root, "detection/semgrep"))
     .filter((f) => f.endsWith(".yml"))
-    .flatMap((f) => [...read(`detection/semgrep/${f}`).matchAll(/^\s+- id:\s*(\S+)/gm)])
+    // `^\s+` demanded at least one leading whitespace character, but several
+    // language packs put `- id:` at column 0 -- and in JavaScript `\s` matches
+    // a newline, so those ids matched only by accident, when a blank line
+    // happened to precede them. Measured 2026-09-05: this saw 21 of 46 rules;
+    // the other 25 were never checked against the docs at all. `[ 	]*` cannot
+    // cross a line boundary, so it is column-agnostic without being accidental.
+    .flatMap((f) => [...read(`detection/semgrep/${f}`).matchAll(/^[ \t]*- id:\s*(\S+)/gm)])
     .map((m) => m[1]);
   const doc = read("detection/README.md");
 
@@ -159,6 +165,26 @@ test("detection README lists every rule id in the ruleset", () => {
   for (const id of rules) {
     assert.ok(doc.includes(id), `detection/README.md never mentions rule ${id}`);
   }
+
+  // The prose count is a claim like any other, and it drifted: the table
+  // listed all 46 while the sentence above it still said 40, because nothing
+  // held it. It is held now.
+  const claim = doc.match(/\*\*(\d+) rules across the `detection\/semgrep\/` directory\*\*/);
+  assert.ok(claim, "detection/README.md no longer states a rule count in the expected form");
+  assert.strictEqual(
+    Number(claim[1]),
+    rules.length,
+    `detection/README.md says ${claim[1]} rules, the directory declares ${rules.length}`,
+  );
+
+  // The root README repeats the same number; a reader hits that one first.
+  const root_claim = read("README.md").match(/ships (\d+) \[Semgrep\]/);
+  assert.ok(root_claim, "README.md no longer states the rule count in the expected form");
+  assert.strictEqual(
+    Number(root_claim[1]),
+    rules.length,
+    `README.md says ${root_claim[1]} rules, the directory declares ${rules.length}`,
+  );
 });
 
 // ── SECURITY.md's toggle range covers every scenario ───────────────────────
