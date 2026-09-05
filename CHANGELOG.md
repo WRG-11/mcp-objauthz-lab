@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.1] - 2026-09-06
+
+`v3.11.0` shipped with `CITATION.cff` still naming **3.5.0** -- six minor
+versions behind. That was corrected on `main` after the release, which fixes
+the repository but not the artefact: anyone citing the published `v3.11.0` tag
+still reads a version that predates the SARIF export, the authorization-chain
+evidence and the five-language corpus.
+
+A patch release is the only way that correction reaches the tag.
+
+### Fixed
+
+- `CITATION.cff` names 3.11.1 and is now checked mechanically against
+  `package.json`. The check compares the two versions directly rather than
+  scanning for a leftover old string -- a scan only works between a bump and a
+  release, and goes blind exactly when the tag catches up, which is how this
+  drifted for six minor versions without anything objecting.
+
+### Also on main since 3.11.0, not requiring a release of their own
+
+- `CODEOWNERS` added -- the last community surface this repo was missing.
+- `zod` 4.4.3 -> 4.5.4 (dependabot).
+
 ## [3.11.0] — 2026-09-05
 
 The PoC's findings become machine-readable: an authorization **chain** is now
