@@ -629,7 +629,14 @@ rules:
     '
   patterns:
   - pattern-either:
-    - pattern: $Q.filter_by(id=$ID)
+    - patterns:
+      - pattern: $Q.filter_by(id=$ID, ...)
+      - pattern-not:
+          patterns:
+          - pattern: $Q.filter_by(id=$ID, ..., $KEY=$V, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i)^(workspace_id|workspaceid|project_id|projectid|organization_id|organizationid|org_id|orgid|tenant_id|tenantid|account_id|accountid|user_id|userid|owner_id|ownerid|team_id|teamid|realm_id|realmid|namespace_id|namespaceid)$
     - patterns:
       - pattern: $S.get($MODEL, $ID)
       - metavariable-regex:
