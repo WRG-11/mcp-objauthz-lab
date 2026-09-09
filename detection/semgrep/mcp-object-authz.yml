@@ -635,6 +635,11 @@ rules:
       - metavariable-regex:
           metavariable: $MODEL
           regex: ^[A-Z][A-Za-z0-9]*$
+      - metavariable-pattern:
+          metavariable: $MODEL
+          patterns:
+          - pattern-not: "'...'"
+          - pattern-not: '"..."'
   metadata:
     cwe:
     - CWE-639
