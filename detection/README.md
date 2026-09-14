@@ -13,7 +13,7 @@ code, not just this lab's.
 scenarios. Twelve of the twenty run against **Python as well as
 JavaScript/TypeScript**: three shared rules declare both, and nine `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **44 rules across the `detection/semgrep/` directory** — the table lists all of them:
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **45 rules across the `detection/semgrep/` directory** — the table lists all of them:
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
@@ -24,6 +24,7 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-admin-named-tool-missing-role-check` | S5 | a tool named `*admin*` never calls a role-check function in its handler |
 | `mcp-client-supplied-scope-overrides-session-py-ternary` | S2 (Python) | Python's `x if x else y` spelling of the same override — a separate rule because a multi-language rule needs every pattern valid in *every* declared language |
 | `mcp-unscoped-query-object-fetch` | S7 | a repository fetch (`findOneBy` / `findOne({ where })` / `delete`) whose filter carries an `id` but **no** tenant key. **WARNING, not ERROR** — a single call can't prove the entity is tenant-scoped, so it flags the shape for review |
+| `mcp-unscoped-query-object-fetch-taint` | S7 | taint-tracked variant: fires only when the `id` reaching the fetch/delete came from the **client** (`req.params`/`body`/`query`). A middleware-loaded `res.locals` object or a session value is server-trusted and stays silent — the provenance the pattern rule can't see. **WARNING**, higher precision / lower recall; run alongside the pattern rule |
 | `mcp-write-parent-from-client-argument` | S6 | a `create`/`save` call whose parent or tenant key comes from a caller-supplied argument instead of the session, with no membership check on it. **WARNING, not ERROR** — bound straight from an argument this is a true positive, bound through a local the variable's origin decides and one call site cannot show it |
 | `mcp-batch-resolve-missing-per-item-scope-filter-py` | S3 (Python) | the same list→get asymmetry in list-comprehension spelling (`[store.get_note(i) for i in ids]`) |
 | `mcp-admin-named-tool-missing-role-check-py` | S5 (Python) | an `@mcp.tool()`-decorated function named `*admin*` whose body never calls a role check |

@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-09-14
+
+### Added
+
+- Detection `mcp-unscoped-query-object-fetch-taint` (taint mode, JS + TS): only a
+  client-sourced id (`req.params` / `req.body` / `req.query`) reaching an unscoped
+  object fetch or delete is flagged. A server-trusted id — a `res.locals`
+  middleware object or a session value — is no longer a false positive, a
+  provenance distinction the provenance-blind pattern rule cannot make.
+- Admin-route exemption on the taint rule: a handler behind an admin role guard is
+  intentionally broad, so a client-id delete there is not the S7 bug
+  (framework-agnostic `pattern-not-inside`).
+- Two teaching fixtures: a dual-marked fixture where the pattern rule and the taint
+  rule deliberately disagree on the `res.locals` case, and an admin-guard fixture.
+
+### Changed
+
+- `mcp-unscoped-query-object-fetch` suppressor now also recognises Prisma `delete`
+  / `update({ where })`, removing a `documents.js`-class false positive on a scoped
+  `{ where: { id, workspaceId } }` mutation.
+- `action.yml` excludes test / spec / `__tests__` trees from the scan.
+- Rule count 44 → 45; `detection/README.md` and the root README counts updated to
+  match. Fixture finding count 63 → 72.
+
 ## [3.11.2] - 2026-09-14
 
 ### Changed

@@ -90,7 +90,7 @@ jobs:
               process.exit(1);
             }
             const got = d.results.length;
-            const want = 63; // 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns.
+            const want = 72; // 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
                              //   2026-09-14: JS 21->18. The duplicate S12 copy of
                              //   mcp-batch-resolve-missing-per-item-scope-filter (js+py, same
                              //   rule ids as the S3 originals) was removed (dedup). The js copy

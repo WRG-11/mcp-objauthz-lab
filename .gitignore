@@ -17,3 +17,11 @@ WRG_*.md
 poc-chain-evidence.json
 poc-chain-evidence.sarif
 .npm-cache/
+
+# External hunt targets + raw scan output: other people's repositories.
+# NEVER commit to this public repo -- license/attribution, repo bloat, and
+# which targets we scan is OPSEC-sensitive (README rule: no real target names).
+# Only hunt/NOTES.md + hunt/README.md (generic, no target names) are trackable.
+hunt/*
+!hunt/NOTES.md
+!hunt/README.md
