@@ -86,5 +86,5 @@ class AppDbContext : DbContext {
     public DbSet<Credential> Credentials { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<Note> Notes { get; set; }
+    public AppDbContext _context = null;
 }
-AppDbContext _context = null;

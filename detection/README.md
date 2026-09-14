@@ -8,12 +8,12 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 22
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 20
 [Semgrep](https://semgrep.dev) rules covering the shapes from the thirteen lab
-scenarios. Eleven of the twenty-two run against **Python as well as
-JavaScript/TypeScript**: three shared rules declare both, and eight `-py`
+scenarios. Twelve of the twenty run against **Python as well as
+JavaScript/TypeScript**: three shared rules declare both, and nine `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **46 rules across the `detection/semgrep/` directory** — the table lists all of them:
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **44 rules across the `detection/semgrep/` directory** — the table lists all of them:
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|

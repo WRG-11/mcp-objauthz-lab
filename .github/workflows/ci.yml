@@ -76,8 +76,26 @@ jobs:
           # with semgrep or the rules.
           node -e '
             const d = JSON.parse(require("fs").readFileSync("/tmp/semgrep-fixtures.json", "utf8"));
+            // Parse canary: a fixture semgrep cannot parse is silently dropped from the scan,
+            // so a broken rule or fixture passes unnoticed. The summary line "Parsed lines
+            // ~100%" is NOT enough -- the JSON errors[] must be empty. Measured 2026-09-14:
+            // three C# and one Swift fixture partial-parsed while the summary still read ~100%.
+            const perr = (d.errors || []).filter((e) => {
+              const ty = e.type && e.type[0] ? e.type[0] : e.type;
+              return String(ty).includes("Parsing") || e.level === "error";
+            });
+            if (perr.length) {
+              console.error("Semgrep parse errors in fixtures (" + perr.length + "):");
+              for (const e of perr) console.error("  " + JSON.stringify(e.type) + " :: " + String(e.message || "").slice(0, 140));
+              process.exit(1);
+            }
             const got = d.results.length;
-            const want = 66; // 21 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns.
+            const want = 63; // 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns.
+                             //   2026-09-14: JS 21->18. The duplicate S12 copy of
+                             //   mcp-batch-resolve-missing-per-item-scope-filter (js+py, same
+                             //   rule ids as the S3 originals) was removed (dedup). The js copy
+                             //   double-counted 3 batch-fixture findings; the py copy was dead
+                             //   (its pattern-not equalled its pattern). Net -3, all JavaScript.
                              //   JS (21): mcp-wildcard-sentinel-scope-bypass
                              //   no longer double-reports (hardened), and
                              //   mcp-client-supplied-scope-overrides-session has
@@ -107,6 +125,23 @@ jobs:
               console.error("Rule set drifted from its own fixtures — see detection/README.md");
               process.exit(1);
             }
+            // Per-rule-id canary (2026-09-14 FP hardening): the new negative fixtures must stay
+            // SILENT and the hardened positive fixtures must still FIRE, so a later regex tweak
+            // cannot quietly gut either the false-positive fix or the true positive it protects.
+            const byFile = (sub) => d.results.filter((r) => r.path.includes(sub));
+            for (const s of ["batch-resolve-local-map-get", "write-parent-server-derived-value"]) {
+              if (byFile(s).length) {
+                console.error("negative fixture " + s + " must be SILENT but fired " + byFile(s).length + " time(s)");
+                process.exit(1);
+              }
+            }
+            for (const f of ["batch-resolve-missing-per-item-scope-filter", "write-parent-from-client-argument"]) {
+              if (!byFile(f).length) {
+                console.error("positive fixture " + f + " must still fire but produced no finding");
+                process.exit(1);
+              }
+            }
+            console.log("per-rule-id canary: negatives silent, S6/S12 positives visible");
           '
 
   dogfood-action-on-self:

@@ -88,8 +88,3 @@ interface IRepository {
     IQueryable<Note> Where(System.Linq.Expressions.Expression<Func<Note, bool>> predicate);
 }
 interface ILogger { void LogInformation(string message, params object[] args); }
-
-Session ResolveSession(string token) => new Session();
-void RequireAdminRole(Session session) {}
-IRepository _repo = null;
-ILogger _logger = null;
