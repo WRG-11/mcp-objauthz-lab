@@ -105,7 +105,3 @@ interface IRepository {
     System.Collections.Generic.IEnumerable<Note> Notes { get; }
 }
 interface ILogger { void LogInformation(string message, params object[] args); }
-
-Session ResolveSession(string token) => new Session();
-IRepository _repo = null;
-ILogger _logger = null;

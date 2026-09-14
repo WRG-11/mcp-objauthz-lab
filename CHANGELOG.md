@@ -4,6 +4,41 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Detection `mcp-batch-resolve-missing-per-item-scope-filter` (JS + Python): the
+  `$METHOD` regex now requires a suffixed accessor (`getNote`, `findById`), so a
+  bare `.get` / `.find` on a local `Map` or dict is no longer mistaken for a
+  batch store fetch — the single largest false-positive source measured against a
+  real Express/Node codebase.
+- Detection `mcp-write-parent-from-client-argument` (JS + Python): a tenant-key
+  value that is a function call is excluded, so a server-derived getter
+  (`createContext({ tenantId: getTenantId() })`) is no longer read as a
+  caller-controlled foreign-parent write. The plain `org_id`-argument true
+  positive is unaffected.
+- Removed the duplicate S12 copy of the batch-resolve rule (both the JS and the
+  Python copy reused the S3 rule ids). The JS copy double-counted every batch
+  finding; the Python copy was dead (its `pattern-not` equalled its `pattern`).
+  Rule count 46 → 44; `detection/README.md` and the root README counts updated to
+  match.
+
+### Added
+
+- Four real-capture negative fixtures (JS + Python), captured from a real scan,
+  that pin both hardenings as SILENT.
+- The fixture CI job now fails on any Semgrep parse error — a partial-parse was
+  previously invisible behind a "Parsed ~100%" summary — and asserts per-rule-id
+  that the new negatives stay silent while the S6/S12 positives still fire.
+
+### Fixed
+
+- Four fixtures (three C#, one Swift) only partial-parsed under Semgrep, leaving
+  their rules unvalidated: C# top-level fields after type declarations were
+  relocated, and the Swift `if let x = try await …` bindings were split into a
+  `let` followed by `if let`. All fixtures now parse fully.
+
 ## [3.11.1] - 2026-09-06
 
 `v3.11.0` shipped with `CITATION.cff` still naming **3.5.0** -- six minor

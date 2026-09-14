@@ -40,7 +40,8 @@ func getNoteSafe(req: Request, id: UUID, orgId: String) async throws -> Note? {
 // FIRE: delete with only id
 func deleteRecordVuln(req: Request, id: UUID) async throws {
     // ruleid: mcp-unscoped-query-object-fetch-swift
-    if let credential = try await Credential.find(id, on: req.db) {
+    let credential = try await Credential.find(id, on: req.db)
+    if let credential = credential {
         try await credential.delete(on: req.db)
     }
 }
@@ -48,10 +49,11 @@ func deleteRecordVuln(req: Request, id: UUID) async throws {
 // OK: delete with projectId
 func deleteRecordSafe(req: Request, id: UUID, projectId: String) async throws {
     // ok: mcp-unscoped-query-object-fetch-swift
-    if let note = try await Note.query(on: req.db)
+    let note = try await Note.query(on: req.db)
         .filter(\.$id == id)
         .filter(\.$projectId == projectId)
-        .first() {
+        .first()
+    if let note = note {
         try await note.delete(on: req.db)
     }
 }
