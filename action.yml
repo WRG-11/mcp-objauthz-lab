@@ -34,8 +34,16 @@ runs:
     - name: Run MCP object-authz scan (SARIF)
       shell: bash
       run: |
+        # Exclude test files: a unit test or fixture intentionally contains the
+        # vulnerable shape (a delete/fetch without a tenant key) as its subject,
+        # so scanning them floods the report with non-production false positives.
+        # Measured 2026-09-14: 11 of 36 write-parent findings in one real target
+        # were test files. --no-git-ignore re-includes them, so exclude explicitly.
         semgrep --config "${{ github.action_path }}/detection/semgrep/" \
           "${{ inputs.path }}" --no-git-ignore --sarif \
+          --exclude='*.test.*' --exclude='*.spec.*' \
+          --exclude='test_*.py' --exclude='*_test.py' \
+          --exclude='**/__tests__/**' --exclude='**/tests/**' --exclude='**/spec/**' \
           --output=mcp-objauthz-results.sarif
 
     - name: Upload SARIF to GitHub Security tab

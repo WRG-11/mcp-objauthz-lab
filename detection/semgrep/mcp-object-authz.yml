@@ -508,6 +508,10 @@ rules:
       - pattern-either:
         - pattern: '$REPO.$M({ ..., $KEY: $V })'
         - pattern: '$REPO.findOne({ where: { ..., $KEY: $V } })'
+        # ORM mutation form: delete/update/softDelete/findFirst carry the scope key
+        # inside a nested `where` object, not at the top level. Without this the
+        # scoped Prisma form (delete({ where: { id, workspaceId } })) was a false positive.
+        - pattern: '$REPO.$M({ where: { ..., $KEY: $V } })'
       - metavariable-regex:
           metavariable: $KEY
           regex: (?i)^(workspaceId|projectId|organizationId|orgId|tenantId|accountId|userId|ownerId|teamId|realmId|namespaceId)$
@@ -1182,3 +1186,53 @@ rules:
     confidence: MEDIUM
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion
+
+- id: mcp-unscoped-query-object-fetch-taint
+  mode: taint
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: "A client-supplied id (req.params/body/query) flows into an object fetch/delete whose filter carries no tenant key. Unlike the pattern-based mcp-unscoped-query-object-fetch, this is taint-tracked: a server-trusted id -- a middleware-loaded res.locals object, or a session value -- is NOT flagged, and a filter that binds a tenant key is treated as authorized. Higher precision, lower recall; run alongside the pattern rule. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query"
+  pattern-sources:
+  - pattern: $REQ.params
+  - pattern: $REQ.body
+  - pattern: $REQ.query
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: '$REPO.delete({ id: $ID })'
+      - pattern: '$REPO.softDelete({ id: $ID })'
+      - pattern: '$REPO.findOneBy({ id: $ID })'
+      - pattern: '$REPO.findOne({ where: { id: $ID } })'
+      - pattern: '$REPO.delete({ where: { id: $ID } })'
+    - pattern-not:
+        patterns:
+        - pattern-either:
+          - pattern: '$REPO.$M({ ..., $KEY: $V })'
+          - pattern: '$REPO.$M({ where: { ..., $KEY: $V } })'
+        - metavariable-regex:
+            metavariable: $KEY
+            regex: (?i)^(workspaceId|projectId|organizationId|orgId|tenantId|accountId|userId|ownerId|teamId|realmId|namespaceId)$
+    # Admin-guarded route: object scope is not expected on an admin-only handler.
+    # Generic (framework-agnostic): any guard fn called with a [ SOMETHING.admin ]
+    # argument list, plus the lab's own require/check/assertAdminRole names.
+    - pattern-not-inside:
+        patterns:
+        - pattern: '$APP.$HTTP($PATH, [..., $GUARD, ...], async (...) => { ... })'
+        - metavariable-pattern:
+            metavariable: $GUARD
+            patterns:
+            - pattern-either:
+              - pattern: '$G([$ROLE.admin])'
+              - pattern: '$G([$ROLE.admin, ...])'
+              - pattern: 'requireAdminRole(...)'
+              - pattern: 'checkAdminRole(...)'
+              - pattern: 'assertAdminRole(...)'
+  metadata:
+    cwe:
+    - CWE-639
+    category: security
+    confidence: MEDIUM
+    references:
+    - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query

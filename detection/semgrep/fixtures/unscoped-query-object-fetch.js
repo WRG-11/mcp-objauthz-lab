@@ -33,3 +33,16 @@ async function deleteRecordSafe({ id, projectId }) {
   // ok: mcp-unscoped-query-object-fetch
   return repo.delete({ id, projectId });
 }
+
+// Prisma-style mutation: the scope key lives inside a nested `where` object, the
+// same shape an ORM delete/update takes. The suppressor knew findOne({where})
+// but not delete/update({where}), so the scoped form was a false positive.
+async function deletePrismaWhereVuln({ id }) {
+  // ruleid: mcp-unscoped-query-object-fetch
+  return prisma.record.delete({ where: { id } });
+}
+
+async function deletePrismaWhereSafe({ id, workspaceId }) {
+  // ok: mcp-unscoped-query-object-fetch
+  return prisma.record.delete({ where: { id, workspaceId } });
+}
