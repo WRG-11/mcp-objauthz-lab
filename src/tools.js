@@ -70,6 +70,13 @@ const notFound = (id) => {
   throw new NotFoundError(`no such note: ${id}`);
 };
 
+// Reads and updates must not reveal whether a caller-supplied id belongs to a
+// different tenant. Keep the caller-visible error uniform while retaining the
+// specific authorization checks used by the deliberately vulnerable lessons.
+const unavailable = () => {
+  throw new NotFoundError("requested note is unavailable");
+};
+
 /**
  * Register every tool on the server.
  * @param {import("@modelcontextprotocol/sdk/server/mcp.js").McpServer} server
@@ -110,8 +117,7 @@ export function registerTools(server, store, modes) {
     guard(async ({ token, id }) => {
       const session = resolveSession(store, token);
       const note = store.getNote(id);
-      if (!note) notFound(id);
-      requireOrgAccess(session, note); // org-scope check (present — compare note_delete in S1 vuln)
+      if (!note || note.orgId !== session.orgId) unavailable();
       return ok(note);
     }),
   );
@@ -149,8 +155,7 @@ export function registerTools(server, store, modes) {
     guard(async ({ token, id, body }) => {
       const session = resolveSession(store, token);
       const note = store.getNote(id);
-      if (!note) notFound(id);
-      requireOrgAccess(session, note); // org-scope check (present)
+      if (!note || note.orgId !== session.orgId) unavailable();
       return ok(store.updateNote(id, { body }));
     }),
   );
