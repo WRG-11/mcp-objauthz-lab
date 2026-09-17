@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.1] - 2026-09-17
+
+### Fixed
+
+- `mcp-unscoped-query-object-fetch-py`: the `$S.get($MODEL, $ID)` branch no longer
+  fires on a string-literal key (e.g. `response.get('Item', {})`) — a
+  metavariable-pattern now requires `$MODEL` not be a quoted string, so a plain
+  dict `.get()` is no longer misread as an unscoped model fetch (false positive,
+  root-caused against a real-world MIT-licensed file).
+- `mcp-unscoped-query-object-fetch-py`: the `$Q.filter_by(id=$ID)` branch now
+  matches `filter_by(id=$ID, ...)` with the JS sibling's tenant-key exclusion
+  (`workspace_id` / `org_id` / `tenant_id` / …). A tenant-scoped fetch stays
+  silent; a non-tenant extra keyword argument — still an object-level authz gap —
+  now fires (false negative closed).
+
 ## [3.12.0] - 2026-09-14
 
 ### Added
