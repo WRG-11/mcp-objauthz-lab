@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.2] - 2026-09-21
+
+### Security
+
+- Fixed-mode note read and update now return a single uniform "unavailable"
+  response for a missing id and for a cross-tenant id alike, so the error no
+  longer distinguishes "does not exist" from "belongs to another tenant". The
+  deliberately vulnerable lessons are unchanged.
+- The HTTP lab transport binds to `127.0.0.1` by default; set `HOST` explicitly
+  for a non-loopback listener.
+
 ## [3.12.1] - 2026-09-17
 
 ### Fixed

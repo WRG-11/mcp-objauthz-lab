@@ -7,7 +7,8 @@
  // S11 (note_create_limited, XFF quota bypass) need; over stdio there is no
  // requestInfo and both silently fall back to the session.
  //
- // Run:  node src/http-server.js            (PORT defaults to 3010)
+ // Run:  node src/http-server.js            (binds 127.0.0.1; PORT defaults to 3010)
+ // Set HOST explicitly only when a non-loopback listener is intentional.
  // Toggle S10/S11 (or any scenario) the same way as the stdio server: LAB_S10=fixed LAB_S11=fixed.
  //
  // This is a deliberately minimal, single-session server for the lab/PoC — it is
@@ -76,8 +77,9 @@ const httpServer = createServer(async (req, res) => {
 });
 
 const port = Number(process.env.PORT ?? 3010);
-httpServer.listen(port, () => {
+const host = process.env.HOST ?? "127.0.0.1";
+httpServer.listen(port, host, () => {
   console.error(
-    `[mcp-objauthz-lab:http] up on :${port}  S10=${modes.s10}  S11=${modes.s11}  S12=${modes.s12}  S13=${modes.s13}  (S1..S9 default vuln unless LAB_S* set)`,
+    `[mcp-objauthz-lab:http] up on ${host}:${port}  S10=${modes.s10}  S11=${modes.s11}  S12=${modes.s12}  S13=${modes.s13}  (S1..S9 default vuln unless LAB_S* set)`,
   );
 });
