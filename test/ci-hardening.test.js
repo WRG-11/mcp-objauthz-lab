@@ -121,3 +121,40 @@ test("dependabot watches the semgrep pin", () => {
     "no dependabot pip entry for /detection -- the pin would rot silently",
   );
 });
+
+// ── installs are reproducible: a committed lockfile, installed with npm ci ──
+// package.json pins the two direct dependencies exactly, but their ~90
+// transitive packages floated on every `npm install` -- package-lock.json had
+// been in .gitignore since the first commit, with no stated reason. The lock
+// carries an integrity hash per package; `npm ci` refuses to install anything
+// that does not match it, and fails if package.json and the lock disagree.
+test("package-lock.json is committed, not ignored, and agrees with package.json", () => {
+  const ignored = read(".gitignore")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .includes("package-lock.json");
+  assert.equal(ignored, false, ".gitignore still excludes package-lock.json");
+
+  const lock = JSON.parse(read("package-lock.json"));
+  const pkg = JSON.parse(read("package.json"));
+  assert.deepEqual(
+    lock.packages[""].dependencies,
+    pkg.dependencies,
+    "package-lock.json root dependencies differ from package.json -- run npm install",
+  );
+  const noIntegrity = Object.entries(lock.packages)
+    .filter(([k, p]) => k && !p.link && !p.integrity)
+    .map(([k]) => k);
+  assert.deepEqual(noIntegrity, [], "lockfile entries without an integrity hash");
+});
+
+test("CI installs node dependencies with npm ci, never npm install", () => {
+  const blocks = workflowFiles.flatMap(runBlocks);
+  const loose = blocks.filter((b) => /\bnpm\s+(install|i)\b/.test(b.body));
+  assert.deepEqual(
+    loose.map((b) => `${b.file}:${b.line}`),
+    [],
+    "npm install ignores a stale lock silently; use npm ci",
+  );
+  assert.ok(blocks.some((b) => /\bnpm\s+ci\b/.test(b.body)), "no npm ci step found");
+});
