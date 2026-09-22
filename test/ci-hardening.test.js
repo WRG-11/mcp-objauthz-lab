@@ -158,3 +158,50 @@ test("CI installs node dependencies with npm ci, never npm install", () => {
   );
   assert.ok(blocks.some((b) => /\bnpm\s+ci\b/.test(b.body)), "no npm ci step found");
 });
+
+// ── least privilege: security-events: write only where SARIF is uploaded ────
+// The dogfood job asked for security-events: write while calling the action
+// with upload-sarif: 'false' -- a write token for the Security tab that no
+// step used. A grant nothing needs is still a grant a compromised step gets.
+/**
+ * YAML text with comments removed: whole-line `#` comments and ` # ...` tails.
+ * The grant is a key, not a phrase -- a comment that *explains* why a job has
+ * no security-events: write must not read as the grant itself.
+ */
+const stripComments = (text) =>
+  text
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*#/.test(l))
+    .map((l) => l.replace(/\s+#\s.*$/, ""))
+    .join("\n");
+
+/** Jobs of a workflow as { name, text }. Understands two-space job keys under `jobs:`. */
+function jobs(rel) {
+  const text = stripComments(read(rel));
+  const body = text.slice(text.search(/^jobs:\s*$/m));
+  const parts = body.split(/^ {2}(?=[\w-]+:\s*$)/m).slice(1);
+  return parts.map((p) => ({ name: p.slice(0, p.indexOf(":")), text: p }));
+}
+
+test("sanity: the job reader sees every job in ci.yml", () => {
+  const names = jobs(".github/workflows/ci.yml").map((j) => j.name);
+  assert.ok(names.length >= 3, `expected >= 3 jobs in ci.yml, saw ${names}`);
+});
+
+test("only jobs that upload SARIF request security-events: write", () => {
+  const offenders = [];
+  for (const wf of workflowFiles) {
+    const text = stripComments(read(wf));
+    const head = text.slice(0, text.search(/^jobs:\s*$/m));
+    const workflowWide = /security-events:\s*write/.test(head);
+    for (const j of jobs(wf)) {
+      const asks = workflowWide || /security-events:\s*write/.test(j.text);
+      if (!asks) continue;
+      const uploads =
+        j.text.includes("github/codeql-action/") ||
+        (/uses:\s*\.\/\s*$/m.test(j.text) && !/upload-sarif:\s*'?"?false/.test(j.text));
+      if (!uploads) offenders.push(`${wf} job ${j.name}`);
+    }
+  }
+  assert.deepEqual(offenders, [], "security-events: write granted to a job that uploads nothing");
+});

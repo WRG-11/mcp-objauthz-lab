@@ -147,8 +147,8 @@ jobs:
   dogfood-action-on-self:
     name: dogfood — the action must FIND the planted vulnerabilities in src/
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
+    # No security-events: write here -- the scan runs with upload-sarif:
+    # 'false', so the job inherits the workflow's read-only token.
     # src/ is intentionally vulnerable by design (see README), so the action
     # exiting 1 here is the SUCCESS case, not the failure case. This job used
     # to let that exit code stand as the job result under continue-on-error,
