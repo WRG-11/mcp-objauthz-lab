@@ -227,3 +227,69 @@ test("README states each repeated count consistently", () => {
       `the Quickstart and the file table must agree`,
   );
 });
+
+// ── CITATION.cff is a published claim too ───────────────────────────────────
+// Nothing held it, and it drifted twice over: `version: 3.12.1` after the
+// 3.12.2 release, and an abstract still saying "seven planted flaws" and
+// "eight of its twelve rules" while the lab wired thirteen scenarios. A
+// citation is copied into papers verbatim; it gets the same treatment as the
+// README. Numbers are derived from source, the prose is checked against them.
+const numberWords = {
+  1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+  8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen",
+  14: "fourteen", 15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
+  19: "nineteen", 20: "twenty",
+};
+
+/** Languages per rule id, for both `languages: [a, b]` and block-list forms. */
+function ruleLanguages() {
+  const byId = new Map();
+  for (const f of readdirSync(join(root, "detection/semgrep")).filter((x) => x.endsWith(".yml"))) {
+    const blocks = read(`detection/semgrep/${f}`).split(/^[ \t]*- id:[ \t]*/m).slice(1);
+    for (const b of blocks) {
+      const id = b.split(/\s/)[0];
+      const inline = b.match(/languages:[ \t]*\[([^\]]*)\]/);
+      const list = b.match(/languages:[ \t]*\r?\n((?:[ \t]*- [\w-]+[ \t]*\r?\n)+)/);
+      const langs = inline
+        ? inline[1].split(",").map((s) => s.trim())
+        : list
+          ? [...list[1].matchAll(/- ([\w-]+)/g)].map((m) => m[1])
+          : [];
+      byId.set(id, new Set([...(byId.get(id) ?? []), ...langs]));
+    }
+  }
+  return byId;
+}
+
+test("sanity: the rule-language reader sees languages for every rule", () => {
+  const byId = ruleLanguages();
+  assert.ok(byId.size >= 6, "expected at least six rules");
+  const empty = [...byId].filter(([, l]) => l.size === 0).map(([id]) => id);
+  assert.deepEqual(empty, [], "rules whose languages the reader could not parse");
+});
+
+test("CITATION.cff version matches package.json", () => {
+  const cff = read("CITATION.cff").match(/^version:\s*"?([\d.]+)"?\s*$/m);
+  assert.ok(cff, "CITATION.cff has no version: line");
+  assert.equal(cff[1], JSON.parse(read("package.json")).version);
+});
+
+test("CITATION.cff abstract states the scenario and language counts the code has", () => {
+  const cff = read("CITATION.cff").replace(/\s+/g, " ");
+  const byId = ruleLanguages();
+  const python = [...byId.values()].filter((l) => l.has("python")).length;
+  const langs = new Set([...byId.values()].flatMap((l) => [...l]));
+  const further = [...langs].filter((l) => !["javascript", "typescript", "python"].includes(l)).length;
+
+  const flaws = cff.match(/carrying (\w+) planted/i);
+  assert.ok(flaws, "abstract no longer says 'carrying N planted' -- update this test");
+  assert.equal(flaws[1].toLowerCase(), numberWords[scenarioCount], "planted-flaw count");
+
+  const py = cff.match(/(\w+) of its rules target Python/i);
+  assert.ok(py, "abstract no longer says 'N of its rules target Python' -- update this test");
+  assert.equal(py[1].toLowerCase(), numberWords[python], "Python rule count");
+
+  const more = cff.match(/(\w+) further languages/i);
+  assert.ok(more, "abstract no longer says 'N further languages' -- update this test");
+  assert.equal(more[1].toLowerCase(), numberWords[further], "further-language count");
+});
