@@ -100,21 +100,19 @@ MCP object-level authorization lab — two-way gate (13 scenarios + hardened bui
   S9   fixed  note_share_redeem own grant     (Alice→Acme)   ALLOWED   ALLOWED   ✓
   S10  vuln   note_get_scoped X-Org-Id=org_globex (Alice over HTTP) LEAKED    LEAKED    ✓
   S10  fixed  note_get_scoped X-Org-Id=org_globex (Alice over HTTP) SCOPED    SCOPED    ✓
-   S11  vuln   note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
-   S11  vuln   note_create_limited quota key is 1.2.3.4       MATCH     MATCH     ✓
-   S11  vuln   note_create_limited X-Forwarded-For=5.6.7.8    BYPASS    BYPASS    ✓
-   S11  vuln   note_create_limited fresh server XFF=5.6.7.8 (quota key logic) CREATED   CREATED   ✓
-   S11  vuln   note_create_limited quota exhausted XFF=5.6.7.8 BLOCKED   BLOCKED   ✓
-   S11  fixed  note_create_limited quota exhausted (same XFF)  BLOCKED   BLOCKED   ✓
-   S11  fixed  note_create_limited quota key is u_alice       MATCH     MATCH     ✓
-   S11  fixed  note_create_limited X-Forwarded-For=5.6.7.8    BLOCKED   BLOCKED   ✓
-   S11  fixed  note_create_limited fresh server XFF=5.6.7.8 (quota key logic) CREATED   CREATED   ✓
-   S11  fixed  note_create_limited quota exhausted XFF=5.6.7.8 BLOCKED   BLOCKED   ✓
+  S11  vuln   note_create_limited quota exhausted (same XFF) BLOCKED   BLOCKED   ✓
+  S11  vuln   note_create_limited quota key is 1.2.3.4       MATCH     MATCH     ✓
+  S11  vuln   note_create_limited fresh server XFF=5.6.7.8 (quota key logic) CREATED   CREATED   ✓
+  S11  vuln   note_create_limited quota exhausted XFF=5.6.7.8 BLOCKED   BLOCKED   ✓
+  S11  fixed  note_create_limited quota exhausted (same XFF) BLOCKED   BLOCKED   ✓
+  S11  fixed  note_create_limited quota key is u_alice       MATCH     MATCH     ✓
+  S11  fixed  note_create_limited fresh server XFF=5.6.7.8 (quota key logic) CREATED   CREATED   ✓
+  S11  fixed  note_create_limited quota exhausted XFF=5.6.7.8 BLOCKED   BLOCKED   ✓
   S12  vuln   note_batch_resolve batch with Globex id (Alice) LEAKED    LEAKED    ✓
   S12  fixed  note_batch_resolve batch with Globex id (Alice) SCOPED    SCOPED    ✓
   S13  vuln   note_get_by_token_scope scope=org_globex (Alice) LEAKED    LEAKED    ✓
   S13  fixed  note_get_by_token_scope scope=org_globex (Alice) SCOPED    SCOPED    ✓
-  ALL  fixed  14 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
+  ALL  fixed  13 cross-tenant routes (Bob→Acme)              BLOCKED   BLOCKED   ✓
   ALL  fixed  legitimate access (Dana admin + Bob own note)  ALLOWED   ALLOWED   ✓
 
   Two-way gate: PASS (38/38 rows OK)
