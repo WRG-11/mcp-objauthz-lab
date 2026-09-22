@@ -9,6 +9,15 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "build(deps)"
+  # The semgrep engine pin read by action.yml and ci.yml. A bump PR runs the
+  # exact fixture-count check, so an engine change that alters findings is
+  # caught at review time instead of in a consumer's CI.
+  - package-ecosystem: "pip"
+    directory: "/detection"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "build(deps)"
   # Keep the CI actions current + SHA-resolvable.
   - package-ecosystem: "github-actions"
     directory: "/"

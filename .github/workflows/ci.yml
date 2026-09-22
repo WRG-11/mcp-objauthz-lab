@@ -63,7 +63,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: install semgrep
-        run: pip install --quiet semgrep
+        run: pip install --quiet -r detection/requirements.txt
       - name: scan fixtures, assert exact expected finding count
         run: |
           semgrep --config detection/semgrep/ \

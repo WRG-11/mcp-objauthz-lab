@@ -86,3 +86,38 @@ test("no ${{ }} expression is interpolated into a run: script", () => {
     `template expressions inside run: (move them to env:) at ${offenders.join(", ")}`,
   );
 });
+
+// ── semgrep is pinned, in one place, and something keeps the pin current ───
+// `pip install semgrep` installs whatever was published that morning, into
+// every consumer's CI. The rule set's behaviour is a function of the engine
+// version (the fixture count below in ci.yml is exact), so an unpinned engine
+// can change what the action reports without a single commit here. One
+// requirements file is the pin; dependabot moves it, CI proves the move.
+const SEMGREP_REQ = "detection/requirements.txt";
+
+test("every semgrep install reads the single pinned requirements file", () => {
+  const installs = actionAndWorkflows
+    .flatMap(runBlocks)
+    .filter((b) => /pip3?\s+install/.test(b.body) && /semgrep|requirements/.test(b.body));
+  assert.ok(installs.length >= 2, "expected the action and ci.yml to install semgrep");
+  for (const b of installs) {
+    assert.ok(
+      b.body.includes(SEMGREP_REQ) && /pip3?\s+install\b[^\n]*\s-r\s/.test(b.body),
+      `${b.file}:${b.line} installs semgrep without -r ${SEMGREP_REQ}`,
+    );
+  }
+});
+
+test("the requirements file pins semgrep to an exact version", () => {
+  const req = read(SEMGREP_REQ);
+  assert.match(req, /^semgrep==\d+\.\d+\.\d+\s*$/m, `${SEMGREP_REQ} must pin semgrep==X.Y.Z`);
+});
+
+test("dependabot watches the semgrep pin", () => {
+  const cfg = read(".github/dependabot.yml");
+  assert.match(
+    cfg,
+    /package-ecosystem:\s*"?pip"?\s*\n\s*directory:\s*"?\/detection"?/,
+    "no dependabot pip entry for /detection -- the pin would rot silently",
+  );
+});

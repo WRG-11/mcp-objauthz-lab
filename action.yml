@@ -29,7 +29,8 @@ runs:
 
     - name: Install semgrep
       shell: bash
-      run: pip install --quiet semgrep
+      # Pinned: the rule set's findings depend on the engine version.
+      run: pip install --quiet -r "$GITHUB_ACTION_PATH/detection/requirements.txt"
 
     - name: Run MCP object-authz scan (SARIF)
       shell: bash
