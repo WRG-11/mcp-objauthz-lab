@@ -177,10 +177,12 @@ jobs:
 
       - name: assert the detector actually fired
         shell: bash
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
         run: |
           sarif="$GITHUB_WORKSPACE/mcp-objauthz-results.sarif"
           if [ ! -f "$sarif" ]; then
-            echo "::error::no SARIF produced — the scan never ran (scan step outcome: ${{ steps.scan.outcome }}). This is a broken workflow, not a clean tree."
+            echo "::error::no SARIF produced — the scan never ran (scan step outcome: $SCAN_OUTCOME). This is a broken workflow, not a clean tree."
             exit 1
           fi
           count=$(python3 -c "
