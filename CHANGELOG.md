@@ -4,6 +4,42 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.3] - 2026-09-22
+
+### Security
+
+- The composite action no longer interpolates `${{ inputs.path }}` (or any
+  other expression) into its shell script. Values reach the script through
+  `env:`, so a `path` derived from a PR title or branch name cannot run as
+  shell in the caller's CI.
+- The semgrep engine is pinned (`detection/requirements.txt`,
+  `semgrep==1.177.0`) for both the action and CI, instead of installing
+  whatever release was current on the day. Dependabot now updates the pin,
+  and every bump runs the exact fixture-count check.
+- `package-lock.json` is committed and CI installs with `npm ci`, so every
+  transitive dependency is pinned with an integrity hash.
+- The dogfood CI job no longer requests `security-events: write`; it uploads
+  no SARIF and now runs with the workflow's read-only token.
+
+### Fixed
+
+- README's "Expected `npm run poc` output" block showed 40 rows under a
+  "38/38" footer and "14 cross-tenant routes" where the hardened arm tries
+  13; it is now the literal PoC output.
+- `CITATION.cff` carried version 3.12.1 and an abstract describing seven
+  scenarios; it now matches the release and the thirteen scenarios.
+- README gained Scenario sections for S11-S13; the stated test count,
+  the challenges host config, and stale CI and PoC header comments were
+  brought up to date.
+
+### Added
+
+- `test/ci-hardening.test.js` holds the action/workflow rules above;
+  `test/readme-poc-output.test.js` runs the PoC and compares it with the
+  README block; `test/docs-consistency.test.js` now also checks
+  `CITATION.cff`, the README test count, per-scenario README sections and
+  the host config. Suite: 70 tests.
+
 ## [3.12.2] - 2026-09-21
 
 ### Security
