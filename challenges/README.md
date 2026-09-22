@@ -46,7 +46,7 @@ Quick Claude Desktop config (`claude_desktop_config.json`):
     "objauthz-lab": {
       "command": "node",
       "args": ["/absolute/path/to/mcp-objauthz-lab/src/server.js"],
-      "env": { "LAB_MODE": "vuln", "LAB_S2": "vuln", "LAB_S3": "vuln", "LAB_S4": "vuln", "LAB_S5": "vuln", "LAB_S6": "vuln", "LAB_S7": "vuln", "LAB_S8": "vuln", "LAB_S9": "vuln", "LAB_S10": "vuln", "LAB_S11": "vuln" }
+      "env": { "LAB_MODE": "vuln", "LAB_S2": "vuln", "LAB_S3": "vuln", "LAB_S4": "vuln", "LAB_S5": "vuln", "LAB_S6": "vuln", "LAB_S7": "vuln", "LAB_S8": "vuln", "LAB_S9": "vuln", "LAB_S10": "vuln", "LAB_S11": "vuln", "LAB_S12": "vuln", "LAB_S13": "vuln" }
     }
   }
 }

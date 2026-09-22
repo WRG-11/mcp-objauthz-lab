@@ -1,16 +1,16 @@
 name: lab-integrity
 
 # This lab is vulnerable BY DESIGN. CI does NOT assert "the code is secure" —
-# it asserts the teaching artifact still works: deps install, every module
-# parses, the pure auth.js/store.js functions behave correctly in isolation
-# (unit tests), and the two-way gate holds across all seven scenarios plus the
-# all-fixed hardened build. Two-way means both halves: in each vuln build the
+# it asserts the teaching artifact still works: deps install from the lockfile,
+# every module parses, the test suite passes (unit, docs-consistency,
+# CI-hardening, PoC-output), and the two-way gate holds across every scenario
+# plus the all-fixed hardened build. Two-way means both halves: in each vuln build the
 # exploit reproduces (and a correctly-scoped sibling still denies, proving an
 # outlier rather than a globally broken server), and in each fixed build it is
 # blocked without over-blocking legitimate same-tenant or admin access. A green
 # check = the lab demonstrates every bug and every fix exactly as the README
-# documents. (No CodeQL: it would simply re-flag the intentionally planted
-# BOLA — verified off, `code-scanning/default-setup` reports "not-configured".)
+# documents. CodeQL runs separately (codeql.yml), as an advanced setup that
+# reads findings against the planted flaws rather than failing on them.
 
 on:
   push:

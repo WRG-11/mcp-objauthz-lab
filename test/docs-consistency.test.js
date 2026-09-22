@@ -293,3 +293,34 @@ test("CITATION.cff abstract states the scenario and language counts the code has
   assert.ok(more, "abstract no longer says 'N further languages' -- update this test");
   assert.equal(more[1].toLowerCase(), numberWords[further], "further-language count");
 });
+
+// ── the README's test count is the suite's, not a remembered number ────────
+// "npm test # 52 tests" stayed true only for the three files it was written
+// about; the suite grew security-hardening, ci-hardening and the PoC-output
+// check, and `npm test` ran more than the README said. The consistency check
+// above only refuses two DIFFERENT numbers -- one stale number passes it.
+test("README's unit-test count equals the tests in test/", () => {
+  const count = readdirSync(join(root, "test"))
+    .filter((f) => f.endsWith(".test.js"))
+    .reduce((n, f) => n + (read(`test/${f}`).match(/^test\(/gm) ?? []).length, 0);
+  const claim = read("README.md").match(/npm test\s+#\s*(\d+) tests\b/);
+  assert.ok(claim, "README no longer states `npm test  # N tests` -- update this test");
+  assert.equal(Number(claim[1]), count, `README says ${claim[1]} tests, test/ declares ${count}`);
+});
+
+// ── every scenario has its own README section ──────────────────────────────
+test("README has a Scenario section for every scenario", () => {
+  const readme = read("README.md");
+  const missing = scenarios.filter((n) => !new RegExp(`^## Scenario S${n} `, "m").test(readme));
+  assert.deepEqual(missing.map((n) => `S${n}`), [], "README has no '## Scenario S<n>' section for");
+});
+
+// ── the host config in challenges/README sets every toggle ─────────────────
+test("challenges/README's MCP host config lists every scenario toggle", () => {
+  const env = read("challenges/README.md").match(/"env":\s*\{([^}]*)\}/);
+  assert.ok(env, "challenges/README.md no longer has an MCP host env block");
+  for (const t of toggles) {
+    const key = t === "LAB_S1" ? /"LAB_(MODE|S1)"/ : new RegExp(`"${t}"`);
+    assert.match(env[1], key, `host config env omits ${t}`);
+  }
+});

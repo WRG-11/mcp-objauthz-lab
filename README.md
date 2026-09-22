@@ -65,7 +65,7 @@ Requirements: **Node.js ≥ 20**.
 
 ```bash
 npm install
-npm test    # 52 tests — auth.js/store.js in isolation, plus docs-consistency
+npm test    # 70 tests — unit, docs-consistency, CI-hardening and PoC-output checks
 npm run poc # 38-row two-way gate — the tools/resources wired end-to-end over MCP
 npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```
@@ -498,6 +498,56 @@ header. See [`challenges/s10.md`](challenges/s10.md).
 
 ---
 
+## Scenario S11 — Forwarded-header quota bypass
+
+**Tool:** `note_create_limited`  **Class:** CWE-639 / CWE-290 — a client-supplied request header keys a rate limit  **Toggle:** `LAB_S11`  ·  **Transport:** HTTP only (`src/http-server.js`)
+
+S11 is the quota sibling of S10. `note_create_limited` allows three notes per
+client, and the vulnerable build decides *which client* from the
+`X-Forwarded-For` request header. A caller who has used up the quota sends a
+new header value and is, as far as the server can tell, a new client. The fixed
+build keys the quota to the session user, so the header no longer changes whose
+quota is counted. Like S10, the bug needs request headers and therefore only
+exists over HTTP.
+
+**Challenge:** You are Alice (`alice-token`), already at the three-note limit.
+Create a fourth note with one extra request header. See
+[`challenges/s11.md`](challenges/s11.md).
+
+---
+
+## Scenario S12 — Batch resolve without a per-item check
+
+**Tool:** `note_batch_resolve`  **Class:** CWE-639 / CWE-862 — a multi-object endpoint without a per-item tenant filter  **Toggle:** `LAB_S12`
+
+`note_batch_resolve` takes a list of note ids and resolves each one. The
+vulnerable build returns every note it finds; the fixed build drops any
+resolved note whose `orgId` is not the caller's. Unlike S3 there is no sibling
+"list" tool to compare against — the batch endpoint is the only door, and it
+checks the caller once for the whole batch instead of once per object.
+
+**Challenge:** You are Alice (`alice-token`, org Acme). Read Globex's
+`n_globex_1` by putting it in a batch next to one of your own notes. See
+[`challenges/s12.md`](challenges/s12.md).
+
+---
+
+## Scenario S13 — Token scope claim trusted as permission
+
+**Tool:** `note_get_by_token_scope`  **Class:** CWE-639 / CWE-290 — a scope/aud claim trusted instead of the session  **Toggle:** `LAB_S13`
+
+`note_get_by_token_scope` accepts an optional `scope` value standing in for a
+token's `aud`/`scope` claim, and the vulnerable build uses it to choose whose
+notes to return. The token proves *who* the caller is; it does not prove what
+the caller may read. The fixed build ignores the claim and derives the scope
+from the resolved session.
+
+**Challenge:** You are Alice (`alice-token`, org Acme). Read Globex's notes by
+presenting a scope claim of `org_globex`. See
+[`challenges/s13.md`](challenges/s13.md).
+
+---
+
 ## Detection rules — automate the hunt
 
 [`detection/`](detection/README.md) ships 45 [Semgrep](https://semgrep.dev)
@@ -570,7 +620,7 @@ steps:
 | [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S13` env vars, passes a `modes` object to `registerTools`. |
 | [`src/http-server.js`](src/http-server.js) | Streamable-HTTP MCP server (for S10/S11). Same tools/store, transports headers via `extra.requestInfo.headers`. |
 | [`poc/exploit.js`](poc/exploit.js) | MCP client running the 38-row two-way gate: all 13 scenarios in isolation, plus the all-`fixed` hardened build. |
-| [`test/`](test/) | `node --test` unit tests for `auth.js`/`store.js` in isolation (52 tests, no MCP transport involved) plus `docs-consistency.test.js`. |
+| [`test/`](test/) | `node --test` suite (70 tests): `auth.js`/`store.js` unit tests with no MCP transport, `docs-consistency` (docs and citation checked against the code), `ci-hardening` (the action's and workflows' supply-chain and privilege rules), and `security-hardening` plus `readme-poc-output`, which start the server. |
 
 **Identity model (deliberate simplification).** Each tool takes a bearer `token`
 the server resolves to a fixed user, org, and role. The caller never asserts its
