@@ -227,3 +227,100 @@ test("README states each repeated count consistently", () => {
       `the Quickstart and the file table must agree`,
   );
 });
+
+// ── CITATION.cff is a published claim too ───────────────────────────────────
+// Nothing held it, and it drifted twice over: `version: 3.12.1` after the
+// 3.12.2 release, and an abstract still saying "seven planted flaws" and
+// "eight of its twelve rules" while the lab wired thirteen scenarios. A
+// citation is copied into papers verbatim; it gets the same treatment as the
+// README. Numbers are derived from source, the prose is checked against them.
+const numberWords = {
+  1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+  8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen",
+  14: "fourteen", 15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
+  19: "nineteen", 20: "twenty",
+};
+
+/** Languages per rule id, for both `languages: [a, b]` and block-list forms. */
+function ruleLanguages() {
+  const byId = new Map();
+  for (const f of readdirSync(join(root, "detection/semgrep")).filter((x) => x.endsWith(".yml"))) {
+    const blocks = read(`detection/semgrep/${f}`).split(/^[ \t]*- id:[ \t]*/m).slice(1);
+    for (const b of blocks) {
+      const id = b.split(/\s/)[0];
+      const inline = b.match(/languages:[ \t]*\[([^\]]*)\]/);
+      const list = b.match(/languages:[ \t]*\r?\n((?:[ \t]*- [\w-]+[ \t]*\r?\n)+)/);
+      const langs = inline
+        ? inline[1].split(",").map((s) => s.trim())
+        : list
+          ? [...list[1].matchAll(/- ([\w-]+)/g)].map((m) => m[1])
+          : [];
+      byId.set(id, new Set([...(byId.get(id) ?? []), ...langs]));
+    }
+  }
+  return byId;
+}
+
+test("sanity: the rule-language reader sees languages for every rule", () => {
+  const byId = ruleLanguages();
+  assert.ok(byId.size >= 6, "expected at least six rules");
+  const empty = [...byId].filter(([, l]) => l.size === 0).map(([id]) => id);
+  assert.deepEqual(empty, [], "rules whose languages the reader could not parse");
+});
+
+test("CITATION.cff version matches package.json", () => {
+  const cff = read("CITATION.cff").match(/^version:\s*"?([\d.]+)"?\s*$/m);
+  assert.ok(cff, "CITATION.cff has no version: line");
+  assert.equal(cff[1], JSON.parse(read("package.json")).version);
+});
+
+test("CITATION.cff abstract states the scenario and language counts the code has", () => {
+  const cff = read("CITATION.cff").replace(/\s+/g, " ");
+  const byId = ruleLanguages();
+  const python = [...byId.values()].filter((l) => l.has("python")).length;
+  const langs = new Set([...byId.values()].flatMap((l) => [...l]));
+  const further = [...langs].filter((l) => !["javascript", "typescript", "python"].includes(l)).length;
+
+  const flaws = cff.match(/carrying (\w+) planted/i);
+  assert.ok(flaws, "abstract no longer says 'carrying N planted' -- update this test");
+  assert.equal(flaws[1].toLowerCase(), numberWords[scenarioCount], "planted-flaw count");
+
+  const py = cff.match(/(\w+) of its rules target Python/i);
+  assert.ok(py, "abstract no longer says 'N of its rules target Python' -- update this test");
+  assert.equal(py[1].toLowerCase(), numberWords[python], "Python rule count");
+
+  const more = cff.match(/(\w+) further languages/i);
+  assert.ok(more, "abstract no longer says 'N further languages' -- update this test");
+  assert.equal(more[1].toLowerCase(), numberWords[further], "further-language count");
+});
+
+// ── the README's test count is the suite's, not a remembered number ────────
+// "npm test # 52 tests" stayed true only for the three files it was written
+// about; the suite grew security-hardening, ci-hardening and the PoC-output
+// check, and `npm test` ran more than the README said. The consistency check
+// above only refuses two DIFFERENT numbers -- one stale number passes it.
+test("README's unit-test count equals the tests in test/", () => {
+  const count = readdirSync(join(root, "test"))
+    .filter((f) => f.endsWith(".test.js"))
+    .reduce((n, f) => n + (read(`test/${f}`).match(/^test\(/gm) ?? []).length, 0);
+  const claim = read("README.md").match(/npm test\s+#\s*(\d+) tests\b/);
+  assert.ok(claim, "README no longer states `npm test  # N tests` -- update this test");
+  assert.equal(Number(claim[1]), count, `README says ${claim[1]} tests, test/ declares ${count}`);
+});
+
+// ── every scenario has its own README section ──────────────────────────────
+test("README has a Scenario section for every scenario", () => {
+  const readme = read("README.md");
+  const missing = scenarios.filter((n) => !new RegExp(`^## Scenario S${n} `, "m").test(readme));
+  assert.deepEqual(missing.map((n) => `S${n}`), [], "README has no '## Scenario S<n>' section for");
+});
+
+// ── the host config in challenges/README sets every toggle ─────────────────
+test("challenges/README's MCP host config lists every scenario toggle", () => {
+  const env = read("challenges/README.md").match(/"env":\s*\{([^}]*)\}/);
+  assert.ok(env, "challenges/README.md no longer has an MCP host env block");
+  for (const t of toggles) {
+    const key = t === "LAB_S1" ? /"LAB_(MODE|S1)"/ : new RegExp(`"${t}"`);
+    assert.match(env[1], key, `host config env omits ${t}`);
+  }
+});

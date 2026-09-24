@@ -1,0 +1,3 @@
+# The engine version the rule set and its fixture count (ci.yml) are proven
+# against. Read by action.yml and ci.yml; bumped by dependabot (pip, /detection).
+semgrep==1.177.0

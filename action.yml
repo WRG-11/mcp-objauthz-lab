@@ -29,18 +29,25 @@ runs:
 
     - name: Install semgrep
       shell: bash
-      run: pip install --quiet semgrep
+      # Pinned: the rule set's findings depend on the engine version.
+      run: pip install --quiet -r "$GITHUB_ACTION_PATH/detection/requirements.txt"
 
     - name: Run MCP object-authz scan (SARIF)
       shell: bash
+      # Inputs reach the script through env, never through ${{ }} in the
+      # script text: an expression is pasted in before bash parses it, so a
+      # `path` built from a PR title or branch name would run as code.
+      env:
+        RULES_DIR: ${{ github.action_path }}/detection/semgrep/
+        SCAN_PATH: ${{ inputs.path }}
       run: |
         # Exclude test files: a unit test or fixture intentionally contains the
         # vulnerable shape (a delete/fetch without a tenant key) as its subject,
         # so scanning them floods the report with non-production false positives.
         # Measured 2026-09-14: 11 of 36 write-parent findings in one real target
         # were test files. --no-git-ignore re-includes them, so exclude explicitly.
-        semgrep --config "${{ github.action_path }}/detection/semgrep/" \
-          "${{ inputs.path }}" --no-git-ignore --sarif \
+        semgrep --config "$RULES_DIR" \
+          "$SCAN_PATH" --no-git-ignore --sarif \
           --exclude='*.test.*' --exclude='*.spec.*' \
           --exclude='test_*.py' --exclude='*_test.py' \
           --exclude='**/__tests__/**' --exclude='**/tests/**' --exclude='**/spec/**' \
