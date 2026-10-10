@@ -40,7 +40,7 @@ scenarios), just in production instead of a lab.
 
 ## Try the challenges
 
-Ten hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
+Thirteen hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
 until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
@@ -130,7 +130,7 @@ are not emitted as findings.
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
 once — every scenario `fixed`, every cross-tenant route closed, and legitimate
-access (an admin's cross-org read, a user's own note) still working. Each S1-S10
+access (an admin's cross-org read, a user's own note) still working. Each S1-S13
 arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
 without these rows the hardened build the section below tells you to run would
 have no coverage at all.
