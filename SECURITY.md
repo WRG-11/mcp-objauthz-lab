@@ -11,7 +11,7 @@ is meant to be run locally.
 ## The planted flaws are intentional — do not report them
 
 All thirteen planted authorization bugs are the **point** of the exercise (see the
-README hunt-checklist and the `LAB_MODE` / `LAB_S1`-`LAB_S13` toggles). They are
+[hunt checklist](docs/hunt-checklist.md) and the `LAB_MODE` / `LAB_S1`-`LAB_S13` toggles). They are
 not vulnerabilities. Note that every toggle **defaults to `vuln`**, so a server
 started with no environment set has all thirteen live — that is intended.
 

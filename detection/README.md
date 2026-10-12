@@ -72,7 +72,7 @@ PascalCase/camelCase casing, `:=` short declarations) doesn't parse as
 JavaScript or Python, and a rule with an unparseable pattern silently stops
 matching in *every* language it declares.
 
-Three of the seven scenarios are covered (S1, S2, S7); the honest gap is S7
+Three of the thirteen scenarios are covered (S1, S2, S7); the honest gap is S7
 itself — Go's most common unscoped-fetch shape is a raw SQL string
 (`db.QueryRow("SELECT ... WHERE id = $1", id)`), and a tenant key's absence
 inside a string literal isn't something Semgrep can reliably see. The rule
@@ -293,7 +293,7 @@ The challenges train a human. This is the automatable half: something a
 CI pipeline or a pre-commit hook can run on a real MCP server's source
 without a human reading every tool handler by hand. Neither replaces the
 other — a scanner with the S1/S5 blind spot above still needs the human
-"read every tool that resolves an object by id" habit the hunt checklist
+"read every tool that resolves an object by id" habit the [hunt checklist](../docs/hunt-checklist.md)
 teaches.
 
 ## Related

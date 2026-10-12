@@ -2,7 +2,7 @@
 
 Thanks for looking. This repo is two things that need different kinds of help:
 
-- a **deliberately vulnerable MCP server** (`src/`) with nine planted bugs and
+- a **deliberately vulnerable MCP server** (`src/`) with thirteen planted bugs and
   a challenge per bug (`challenges/`), and
 - a **Semgrep ruleset** (`detection/`) that finds those same bugs in real MCP
   servers.
