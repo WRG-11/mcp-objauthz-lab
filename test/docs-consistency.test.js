@@ -435,6 +435,37 @@ test("prose states the scenario count the server wires", () => {
   );
 });
 
+// ── the first-screen excerpt is part of the full block ─────────────────────
+// The README opens with a few rows of PoC output. readme-poc-output.test.js
+// holds the full block against what the PoC prints; this holds the excerpt
+// against the full block, so the two cannot drift apart.
+test("README's first-screen PoC excerpt comes from the expected-output block", () => {
+  const lines = read("README.md").split(/\r?\n/);
+  // Walk the fences. A regex would pair a closing fence with the next opening one.
+  const blocks = [];
+  let open = null;
+  lines.forEach((line, i) => {
+    if (!line.startsWith("```")) return;
+    if (open === null) {
+      open = i;
+    } else {
+      blocks.push({ start: open, body: lines.slice(open + 1, i) });
+      open = null;
+    }
+  });
+  assert.equal(open, null, "README has an unclosed code fence");
+  const marker = lines.findIndex((l) => l.includes("Expected `npm run poc` output"));
+  assert.ok(marker > -1, "README no longer has the 'Expected `npm run poc` output' block");
+  const full = blocks.find((b) => b.start > marker);
+  assert.ok(full, "no code block follows 'Expected `npm run poc` output'");
+  const excerpt = blocks.find((b) => b.start < marker && b.body.some((l) => l.includes("Two-way gate:")));
+  assert.ok(excerpt, "README no longer opens with a PoC excerpt -- update this test");
+  const rows = excerpt.body.filter((l) => l.trim() !== "");
+  assert.ok(rows.length >= 3, "excerpt is too short to show anything");
+  const stray = rows.filter((l) => !full.body.includes(l));
+  assert.deepEqual(stray, [], "excerpt lines that are not in the expected-output block");
+});
+
 // ── the host config in challenges/README sets every toggle ─────────────────
 test("challenges/README's MCP host config lists every scenario toggle", () => {
   const env = read("challenges/README.md").match(/"env":\s*\{([^}]*)\}/);

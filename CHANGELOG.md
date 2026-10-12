@@ -8,11 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The README is shorter: 748 lines down to 298. The scenario walkthroughs, the
+- The README is shorter: 748 lines down to 315. The scenario walkthroughs, the
   hunt checklist, the file map, the environment-variable table and the
   detection measurement notes moved to `docs/` unchanged. The prose that stays
   is tightened. Every `## Scenario S<n>` heading stays in the README, so
   existing deep links keep working.
+- The README opens with the command that runs the PoC and two rows of its
+  output, copied from the expected-output block further down. A test fails
+  when an excerpt row is not in that block.
 - `docs-consistency` now checks stated counts across the README and `docs/`
   together, and requires a walkthrough section for every scenario.
 

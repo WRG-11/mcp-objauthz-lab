@@ -4,16 +4,32 @@
 [![CodeQL](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/codeql.yml/badge.svg)](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> A small, self-hostable [MCP](https://modelcontextprotocol.io) server that is
-> vulnerable by design. It teaches how object-level and cross-tenant authorization
-> bugs (BOLA / IDOR: [CWE-639](https://cwe.mitre.org/data/definitions/639.html),
-> [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
-> Context Protocol tools, and how to hunt them.
+A vulnerable-by-design [MCP](https://modelcontextprotocol.io) server for practising
+object-level authorization bugs (BOLA / IDOR, [CWE-639](https://cwe.mitre.org/data/definitions/639.html),
+[CWE-862](https://cwe.mitre.org/data/definitions/862.html)) in MCP tools. Thirteen hands-on
+scenarios, each one a different variant of the bug, each with a vulnerable build and a
+fixed build.
 
-It is a multi-tenant note server exposing eighteen MCP tools and one MCP resource
-across thirteen independent BOLA scenarios. Each scenario is a different variant
-of the same bug class, toggled by its own environment variable. Run them all at
-once or isolate one at a time.
+```bash
+git clone https://github.com/WRG-11/mcp-objauthz-lab && cd mcp-objauthz-lab
+npm install && npm run poc    # Node.js 20 or newer
+```
+
+The PoC is an MCP client. It starts the server on your machine and sends the same
+cross-tenant request to both builds. Two rows of its 38-row output:
+
+```
+  SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
+  S2   vuln   note_search  scope-as-param (Alice→org_globex) LEAKED    LEAKED    ✓
+  S2   fixed  note_search  scope-as-param (Alice→org_globex) SCOPED    SCOPED    ✓
+
+  Two-way gate: PASS (38/38 rows OK)
+```
+
+Same caller, same request: the vulnerable build returns another tenant's notes, the fixed
+build scopes the result to the caller's own tenant.
+
+[Try the scenarios without the answers](#try-the-challenges) · [Walkthroughs](docs/scenarios.md) · [Hunt checklist](docs/hunt-checklist.md)
 
 ## Why this lab exists
 
@@ -35,8 +51,8 @@ instead of a lab.
 
 ## Try the challenges
 
-Thirteen hands-on scenarios in [`challenges/`](challenges/README.md), with no hints
-until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
+The scenarios are in [`challenges/`](challenges/README.md), with no hints until you
+open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
 |---|---|
@@ -62,7 +78,7 @@ Requirements: Node.js 20 or later.
 
 ```bash
 npm install
-npm test    # 73 tests: unit, docs-consistency, CI-hardening and PoC-output checks
+npm test    # 74 tests: unit, docs-consistency, CI-hardening and PoC-output checks
 npm run poc # 38-row two-way gate: the tools/resources wired end-to-end over MCP
 npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```
@@ -166,8 +182,9 @@ steps:
 
 ## Run modes
 
-Each scenario has its own toggle, `LAB_S1` to `LAB_S13`, and every toggle defaults to
-`vuln`. Run all scenarios in their fixed state:
+The lab is a multi-tenant note server exposing eighteen MCP tools and one MCP resource
+across thirteen independent BOLA scenarios. Each scenario has its own toggle, `LAB_S1`
+to `LAB_S13`, and every toggle defaults to `vuln`. Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
