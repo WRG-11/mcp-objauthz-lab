@@ -187,6 +187,22 @@ test("detection README lists every rule id in the ruleset", () => {
   );
 });
 
+// ── a rule id names one rule ───────────────────────────────────────────────
+// Two ids were each declared twice: the S13 rules had been appended under the
+// ids of the S2 rules they were copied from. Semgrep ran both definitions, so
+// an `org_id` override was reported twice under one id, and the rule table
+// listed 43 ids under a sentence that said 45. An id is how a reader
+// suppresses or filters a finding; it has to name exactly one rule.
+test("no rule id is declared twice", () => {
+  const ids = readdirSync(join(root, "detection/semgrep"))
+    .filter((f) => f.endsWith(".yml"))
+    .flatMap((f) => [...read(`detection/semgrep/${f}`).matchAll(/^[ \t]*- id:\s*(\S+)/gm)])
+    .map((m) => m[1]);
+  assert.ok(ids.length >= 6, "expected at least six rules");
+  const twice = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  assert.deepEqual(twice, [], "rule ids declared more than once");
+});
+
 // ── SECURITY.md's toggle range covers every scenario ───────────────────────
 test("SECURITY.md's toggle range ends at the last scenario", () => {
   const sec = read("SECURITY.md");
@@ -206,7 +222,14 @@ test("SECURITY.md's toggle range ends at the last scenario", () => {
 // the class the whole v3.10 doc-drift belonged to; it derives nothing from
 // source, it just refuses to let README contradict itself.
 test("README states each repeated count consistently", () => {
-  const readme = read("README.md");
+  // The prose carrying these counts is split between the README and docs/.
+  // A count must agree across all of it, not only inside one file.
+  const readme = [
+    read("README.md"),
+    ...readdirSync(join(root, "docs"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => read(`docs/${f}`)),
+  ].join("\n");
   const nums = (re) => [
     ...new Set([...readme.matchAll(re)].map((m) => Number(m[1]))),
   ];
@@ -313,6 +336,150 @@ test("README has a Scenario section for every scenario", () => {
   const readme = read("README.md");
   const missing = scenarios.filter((n) => !new RegExp(`^## Scenario S${n} `, "m").test(readme));
   assert.deepEqual(missing.map((n) => `S${n}`), [], "README has no '## Scenario S<n>' section for");
+
+  // The README section is a short entry; the walkthrough it points to must exist too.
+  const walkthroughs = read("docs/scenarios.md");
+  const missingDocs = scenarios.filter(
+    (n) => !new RegExp(`^## Scenario S${n} `, "m").test(walkthroughs),
+  );
+  assert.deepEqual(
+    missingDocs.map((n) => `S${n}`),
+    [],
+    "docs/scenarios.md has no '## Scenario S<n>' section for",
+  );
+});
+
+// ── rule messages deep-link into the README; the anchors must exist ────────
+// Three of them did not: the S6, S11 and S13 headings were renamed and twelve
+// rule references kept pointing at the old anchors. A link inside a shipped
+// rule is read in someone else's CI log, long after the heading changed.
+test("every README anchor a rule links to exists in the README", () => {
+  const readme = read("README.md");
+  // GitHub's heading slug: lower-case, drop everything that is not a letter,
+  // digit, hyphen, underscore or space, then turn each space into a hyphen.
+  const slug = (h) =>
+    h.toLowerCase().replace(/[^\p{L}\p{N}\- _]/gu, "").replace(/ /g, "-");
+  const anchors = new Set([
+    ...[...readme.matchAll(/^#{1,6} (.+?)\s*$/gm)].map((m) => slug(m[1])),
+    ...[...readme.matchAll(/<a id="([^"]+)"><\/a>/g)].map((m) => m[1]),
+  ]);
+  const linked = new Set(
+    readdirSync(join(root, "detection/semgrep"))
+      .filter((f) => f.endsWith(".yml"))
+      .flatMap((f) => [
+        ...read(`detection/semgrep/${f}`).matchAll(/mcp-objauthz-lab#([a-z0-9-]+)/g),
+      ])
+      .map((m) => m[1]),
+  );
+  assert.ok(linked.size >= 6, "expected the rule files to link at least six README anchors");
+  const dead = [...linked].filter((a) => !anchors.has(a));
+  assert.deepEqual(dead, [], "rule files link to README anchors that do not exist");
+});
+
+// ── a rule message is read in someone else's terminal ──────────────────────
+// Ten messages carried an em dash whose UTF-8 bytes had been read as cp1252
+// and written back as escapes. Semgrep printed the three stray characters
+// verbatim, on 21 of the 72 fixture findings.
+test("no rule message carries mojibake", () => {
+  const files = readdirSync(join(root, "detection/semgrep")).filter((f) => f.endsWith(".yml"));
+  assert.ok(files.length >= 2, "expected the rule files");
+  // Two spellings of the same damage: the escapes a double-quoted YAML scalar
+  // holds, and the decoded characters themselves.
+  const tell = /\\xE2\\u20AC|\\xC3\\xA2|â€|Ã¢/;
+  const bad = files.filter((f) => tell.test(read(`detection/semgrep/${f}`)));
+  assert.deepEqual(bad, [], "rule files holding a mojibake sequence");
+});
+
+// ── the scenario count in prose, outside the tables ────────────────────────
+// The header of this file names the files S7 left behind. Nothing here held
+// the counts they state in free text, and they drifted again: an issue
+// template said "7 of the 9 scenarios", CONTRIBUTING said "nine planted bugs"
+// and the issue chooser said "seven", while the server wired thirteen.
+test("prose states the scenario count the server wires", () => {
+  // A file that quotes a superseded count on purpose is named here, with the
+  // reason. Anything not listed is held to the current count.
+  const historical = new Map([
+    ["docs/detection-notes.md", 'explains why the old "5 of 7 scenarios" claim was wrong'],
+  ]);
+  const files = [
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "challenges/README.md",
+    "detection/README.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ...readdirSync(join(root, ".github/ISSUE_TEMPLATE")).map((f) => `.github/ISSUE_TEMPLATE/${f}`),
+    ...readdirSync(join(root, "docs"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => `docs/${f}`),
+  ].filter((rel) => !historical.has(rel));
+
+  // "the planted flaws" states no count; only a number is a claim.
+  const toNumber = (w) => {
+    if (/^\d+$/.test(w)) return Number(w);
+    const hit = Object.entries(numberWords).find(([, word]) => word === w.toLowerCase());
+    return hit ? Number(hit[0]) : null;
+  };
+  const shapes = [
+    /\b(\w+) planted (?:authorization )?(?:bugs|flaws)\b/gi,
+    /\bof (?:the )?(\w+) scenarios\b/gi,
+    /\ball (\w+) scenarios\b/gi,
+    /\b(\w+) independent BOLA scenarios\b/gi,
+    /\b(\w+) hands-on scenarios\b/gi,
+    /\bthe (\w+) lab scenarios\b/gi,
+  ];
+
+  const claims = [];
+  for (const rel of files) {
+    const text = read(rel).replace(/\s+/g, " ");
+    for (const re of shapes) {
+      for (const m of text.matchAll(re)) {
+        const n = toNumber(m[1]);
+        if (n !== null) claims.push({ rel, said: m[0], n });
+      }
+    }
+  }
+
+  assert.ok(
+    claims.length >= 10,
+    `expected at least ten scenario-count claims, read ${claims.length} -- the shapes no longer match the prose`,
+  );
+  assert.deepEqual(
+    claims.filter((c) => c.n !== scenarioCount).map((c) => `${c.rel}: "${c.said}"`),
+    [],
+    `scenario-count claims that do not say ${scenarioCount}`,
+  );
+});
+
+// ── the first-screen excerpt is part of the full block ─────────────────────
+// The README opens with a few rows of PoC output. readme-poc-output.test.js
+// holds the full block against what the PoC prints; this holds the excerpt
+// against the full block, so the two cannot drift apart.
+test("README's first-screen PoC excerpt comes from the expected-output block", () => {
+  const lines = read("README.md").split(/\r?\n/);
+  // Walk the fences. A regex would pair a closing fence with the next opening one.
+  const blocks = [];
+  let open = null;
+  lines.forEach((line, i) => {
+    if (!line.startsWith("```")) return;
+    if (open === null) {
+      open = i;
+    } else {
+      blocks.push({ start: open, body: lines.slice(open + 1, i) });
+      open = null;
+    }
+  });
+  assert.equal(open, null, "README has an unclosed code fence");
+  const marker = lines.findIndex((l) => l.includes("Expected `npm run poc` output"));
+  assert.ok(marker > -1, "README no longer has the 'Expected `npm run poc` output' block");
+  const full = blocks.find((b) => b.start > marker);
+  assert.ok(full, "no code block follows 'Expected `npm run poc` output'");
+  const excerpt = blocks.find((b) => b.start < marker && b.body.some((l) => l.includes("Two-way gate:")));
+  assert.ok(excerpt, "README no longer opens with a PoC excerpt -- update this test");
+  const rows = excerpt.body.filter((l) => l.trim() !== "");
+  assert.ok(rows.length >= 3, "excerpt is too short to show anything");
+  const stray = rows.filter((l) => !full.body.includes(l));
+  assert.deepEqual(stray, [], "excerpt lines that are not in the expected-output block");
 });
 
 // ── the host config in challenges/README sets every toggle ─────────────────

@@ -3,9 +3,7 @@ node_modules/
 .DS_Store
 artifacts/
 
-# WRG dispatch/done reports -- internal Turkish, never commit to this public repo
-WRG_BRIEF*.md
-WRG_DONE*.md
+# Local working notes -- never commit to this public repo
 WRG_*.md
 
 # PoC output. README documents exactly these two filenames

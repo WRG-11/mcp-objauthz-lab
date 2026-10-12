@@ -4,6 +4,64 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The README is shorter: 748 lines down to 315. The scenario walkthroughs, the
+  hunt checklist, the file map, the environment-variable table and the
+  detection measurement notes moved to `docs/` unchanged. The prose that stays
+  is tightened. Every `## Scenario S<n>` heading stays in the README, so
+  existing deep links keep working.
+- The README opens with the command that runs the PoC and two rows of its
+  output, copied from the expected-output block further down. A test fails
+  when an excerpt row is not in that block.
+- `docs-consistency` now checks stated counts across the README and `docs/`
+  together, and requires a walkthrough section for every scenario.
+- The two S13 rules have ids of their own:
+  `mcp-token-scope-claim-overrides-session` and
+  `mcp-token-scope-claim-overrides-session-py-ternary`. Since 3.10 they had
+  shipped under the ids of the S2 rules they were copied from, so the ruleset
+  declared those two ids twice. They now match `scope` and `aud` only; the
+  `org_id`/`user_id` names stay with the S2 rules. A `nosemgrep` comment or a
+  SARIF filter that names the S2 id for a `scope`/`aud` finding needs the new
+  id. `CITATION.cff` follows: twelve rules target Python, counted by id.
+
+### Fixed
+
+- Twelve references in the rule files pointed at three README anchors that no
+  longer existed (`#scenario-s6--foreign-parent`,
+  `#scenario-s11--xff-quota-bypass`, `#scenario-s13--jwt-token-scope-confusion`).
+  The README now carries those anchors, and a test fails when a rule links to
+  an anchor the README does not have.
+- Five stale scenario counts: `CONTRIBUTING.md` said nine planted bugs, the
+  issue chooser said seven, the missed-detection template said nine twice and
+  the Go section of `detection/README.md` said seven. The server wires
+  thirteen. A test now derives the count from the server and checks the prose
+  in those files against it. A comment in `poc/exploit.js` carried the same
+  stale count and now states none.
+- Ten rule messages printed three stray characters where an em dash was
+  meant (UTF-8 read as cp1252). Semgrep emitted them on 21 of the 72 fixture
+  findings. The messages are repaired and a test rejects the sequence.
+- `SECURITY.md` pointed at a README hunt checklist; it now links
+  `docs/hunt-checklist.md`.
+- A line with an `org_id`-style override was reported twice under one rule
+  id, once by each of the two definitions. It is reported once. Measured on
+  `src/`: 13 findings before, 11 after, on the same lines.
+- The S2 fixtures for JavaScript and Python are back. The 3.10 release
+  overwrote them with the S13 cases, which left
+  `mcp-client-supplied-scope-overrides-session` and its Python ternary
+  sibling with no fixture, the `user_id` case added after CVE-2026-9135
+  included. Both sets now sit side by side
+  (`client-supplied-scope-overrides-session.*` and
+  `token-scope-claim-overrides-session.*`), and the fixture scan expects 78
+  findings instead of 72.
+- `solutions/s13.md` said no rule matched a parameter named `scope`. One has
+  since 3.10; the note now names it.
+- `detection/README.md` said the main rule file holds 20 rules and listed 43
+  ids in a table introduced as complete. The file holds 21, and the table
+  lists all 45.
+
 ## [3.12.3] - 2026-09-22
 
 ### Security

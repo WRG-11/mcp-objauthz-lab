@@ -4,69 +4,82 @@
 [![CodeQL](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/codeql.yml/badge.svg)](https://github.com/WRG-11/mcp-objauthz-lab/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> A small, self-hostable, **vulnerable-by-design** [MCP](https://modelcontextprotocol.io)
-> server for learning how **object-level / cross-tenant authorization** bugs
-> (BOLA / IDOR — [CWE-639](https://cwe.mitre.org/data/definitions/639.html),
-> [CWE-862](https://cwe.mitre.org/data/definitions/862.html)) appear in Model
-> Context Protocol tools, and how to hunt them.
+A vulnerable-by-design [MCP](https://modelcontextprotocol.io) server for practising
+object-level authorization bugs (BOLA / IDOR, [CWE-639](https://cwe.mitre.org/data/definitions/639.html),
+[CWE-862](https://cwe.mitre.org/data/definitions/862.html)) in MCP tools. Thirteen hands-on
+scenarios, each one a different variant of the bug, each with a vulnerable build and a
+fixed build.
 
-It is a multi-tenant note server exposing eighteen MCP tools and one MCP resource
-across **thirteen independent BOLA scenarios**. Each scenario is a different variant
-of the same bug class, toggled by its own environment variable. Run them all at
-once or isolate one at a time.
+```bash
+git clone https://github.com/WRG-11/mcp-objauthz-lab && cd mcp-objauthz-lab
+npm install && npm run poc    # Node.js 20 or newer
+```
+
+The PoC is an MCP client. It starts the server on your machine and sends the same
+cross-tenant request to both builds. Two rows of its 38-row output:
+
+```
+  SC   BUILD  ACTION                                         OUTCOME   EXPECT    OK
+  S2   vuln   note_search  scope-as-param (Alice→org_globex) LEAKED    LEAKED    ✓
+  S2   fixed  note_search  scope-as-param (Alice→org_globex) SCOPED    SCOPED    ✓
+
+  Two-way gate: PASS (38/38 rows OK)
+```
+
+Same caller, same request: the vulnerable build returns another tenant's notes, the fixed
+build scopes the result to the caller's own tenant.
+
+[Try the scenarios without the answers](#try-the-challenges) · [Walkthroughs](docs/scenarios.md) · [Hunt checklist](docs/hunt-checklist.md)
 
 ## Why this lab exists
 
-Most MCP security attention goes to **prompt injection** and tool-poisoning.
-Object-level authorization is a quieter, different class, and the usual
-prompt-injection test suites and scanners do **not** find it. When an MCP server
-is multi-tenant, every tool that resolves an object from a **client-supplied id**
-must verify the caller is allowed to touch *that* object. Miss the check on a
-single tool and you have a cross-tenant read, write, or delete — regardless of
-how good the prompt-injection defenses are. Catching it takes *reading the
-authorization on each tool*, which is exactly the muscle this lab trains.
+Most MCP security attention goes to prompt injection and tool poisoning.
+Object-level authorization is a different class, and the usual prompt-injection
+test suites and scanners do not find it. When an MCP server is multi-tenant, every
+tool that resolves an object from a client-supplied id must verify the caller is
+allowed to touch that object. Miss the check on a single tool and a caller in one
+tenant can read or change another tenant's objects.
 
-This isn't theoretical. Asana's MCP connector (Jun 2025) leaked data across
-tenant boundaries for roughly 1,000 customer organizations — a breakdown in
-tenant isolation, the same shape of bug as S1-S7 below
+This is not theoretical. Asana's MCP connector (Jun 2025) leaked data across tenant
+boundaries for roughly 1,000 customer organizations
 ([Pomerium's writeup](https://www.pomerium.com/blog/asanas-ai-connector-leak-exposed-sensitive-data-across-organizations-what-it-means-for-mcp-security)).
-And n8n-mcp — a popular MCP server with 20k+ GitHub stars — shipped
+In n8n-mcp,
 [CVE-2026-54052](https://www.manifold.security/blog/n8n-mcp-idor-cross-tenant-credential-theft)
-(CVSS 9.6): sequential integer ids on a table missing a tenant-id column let
-any caller read or delete another tenant's stored API keys. Neither would
-have been caught by a prompt-injection scanner — both are S1/S3-shaped bugs
-(this lab's "missing check on one tool" and "list vs. get asymmetry"
-scenarios), just in production instead of a lab.
+let any caller read or delete another tenant's stored API keys: sequential integer
+ids on a table with no tenant-id column. Both are S1/S3-shaped bugs, in production
+instead of a lab.
 
 ## Try the challenges
 
-Ten hands-on scenarios in [`challenges/`](challenges/README.md) — no hints
-until you open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
+The scenarios are in [`challenges/`](challenges/README.md), with no hints until you
+open [`solutions/`](solutions/). Each runs locally in under 5 minutes.
 
 | Scenario | Pattern |
 |---|---|
-| [S1](challenges/s1.md) | Inconsistent authorization — find the single outlier |
+| [S1](challenges/s1.md) | Inconsistent authorization: find the single outlier |
 | [S2](challenges/s2.md) | Client-supplied scope trusted as authorization |
-| [S3](challenges/s3.md) | List→get asymmetry — batch skips per-object check |
+| [S3](challenges/s3.md) | List→get asymmetry: batch skips per-object check |
 | [S4](challenges/s4.md) | Wildcard/sentinel value bypasses scope filter |
-| [S5](challenges/s5.md) | Role/token-type bypass — admin-named tool, no role check |
-| [S6](challenges/s6.md) | Foreign-parent injection — create trusts a caller-supplied org |
-| [S7](challenges/s7.md) | Unscoped query — tenant key omitted from the filter (the real-world shape) |
-| [S8](challenges/s8.md) | Resource-URI-as-scope — the resources/read surface, not tools/call |
-| [S9](challenges/s9.md) | Authz-from-client-round-tripped-value — an editable share grant |
-| [S10](challenges/s10.md) | Forwarded-header-as-scope — a trusted request header (HTTP transport) |
-| [S11](challenges/s11.md) | X-Forwarded-For quota bypass — a trusted request header for rate limiting (HTTP transport) |
-| [S12](challenges/s12.md) | Batch/bulk endpoint BOLA — multi-object endpoint without per-item tenant filter |
-| [S13](challenges/s13.md) | JWT/token scope confusion — token's scope/aud claim vs actual permissions mismatch |
+| [S5](challenges/s5.md) | Role/token-type bypass: admin-named tool, no role check |
+| [S6](challenges/s6.md) | Foreign-parent injection: create trusts a caller-supplied org |
+| [S7](challenges/s7.md) | Unscoped query: tenant key omitted from the filter (the real-world shape) |
+| [S8](challenges/s8.md) | Resource-URI-as-scope: the resources/read surface, not tools/call |
+| [S9](challenges/s9.md) | Authz-from-client-round-tripped-value: an editable share grant |
+| [S10](challenges/s10.md) | Forwarded-header-as-scope: a trusted request header (HTTP transport) |
+| [S11](challenges/s11.md) | X-Forwarded-For quota bypass: a trusted request header for rate limiting (HTTP transport) |
+| [S12](challenges/s12.md) | Batch/bulk endpoint BOLA: multi-object endpoint without per-item tenant filter |
+| [S13](challenges/s13.md) | JWT/token scope confusion: token's scope/aud claim vs actual permissions mismatch |
+
+Walkthroughs with hints and answers are in [`docs/scenarios.md`](docs/scenarios.md).
 
 ## Quickstart (< 5 minutes)
 
-Requirements: **Node.js ≥ 20**.
+Requirements: Node.js 20 or later.
 
 ```bash
 npm install
-npm test    # 70 tests — unit, docs-consistency, CI-hardening and PoC-output checks
-npm run poc # 38-row two-way gate — the tools/resources wired end-to-end over MCP
+npm test    # 75 tests: unit, docs-consistency, CI-hardening and PoC-output checks
+npm run poc # 38-row two-way gate: the tools/resources wired end-to-end over MCP
 npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```
 
@@ -118,9 +131,9 @@ MCP object-level authorization lab — two-way gate (13 scenarios + hardened bui
   Two-way gate: PASS (38/38 rows OK)
 ```
 
-The PoC is a real MCP client. It spawns the server over stdio (**locally — no
-network, no third party**) and runs a *two-way gate* per scenario: in the **vuln**
-build the exploit succeeds; in the **fixed** build it is blocked and legitimate
+The PoC is a real MCP client. It spawns the server over stdio, locally, with no
+network and no third party, and runs a two-way gate per scenario: in the `vuln`
+build the exploit succeeds; in the `fixed` build it is blocked and legitimate
 same-org access still works (no false positive).
 
 `--json-output` writes the structured evidence contract used by the optional
@@ -129,472 +142,29 @@ from the intentionally vulnerable build; fixed controls and expected denials
 are not emitted as findings.
 
 The final `ALL` rows apply that same two-way discipline to the whole server at
-once — every scenario `fixed`, every cross-tenant route closed, and legitimate
-access (an admin's cross-org read, a user's own note) still working. Each S1-S10
+once. With every scenario `fixed`, each cross-tenant route is closed while legitimate
+access (an admin's cross-org read, a user's own note) still works. Each S1-S13
 arm deliberately pins one toggle and leaves the rest at their `vuln` default, so
-without these rows the hardened build the section below tells you to run would
-have no coverage at all.
+without these rows the hardened build that [Run modes](#run-modes) tells you to run
+would have no coverage at all.
 
----
+<a id="detection-rules--automate-the-hunt"></a>
 
-## Scenario S1 — Missing org-scope check (the original)
-
-**Tool:** `note_delete`  
-**Class:** CWE-639 / CWE-862 — object-level authorization  
-**Toggle:** `LAB_MODE` / `LAB_S1`
-
-Among the six core note tools, every one that resolves an object by a
-client-supplied `id` calls `requireOrgAccess()` to confirm the note belongs to
-the caller's org — except `note_delete` (in vuln mode), so **any caller can
-delete any org's note** by knowing or guessing its id.
-
-**Challenge:** The six core note tools are `note_list`, `note_get`,
-`note_create`, `note_update`, `note_delete`, `note_search`. Exactly one lets a
-caller in one org delete another org's note. Which one, and what makes it
-different?
-
-> The server exposes eighteen tools in total; six of them belong to S3-S7 and
-> are vulnerable in their own default state. Run
-> [`challenges/s1.md`](challenges/s1.md)'s Setup command, which pins them to
-> `fixed`, or this scenario has more than one answer.
-
-<details>
-<summary>Hint</summary>
-
-Three tools take a client-supplied `id` (`note_get`, `note_update`, `note_delete`).
-Two of them call `requireOrgAccess()` after resolving the note. One does not.
-</details>
-
-<details>
-<summary>Answer</summary>
-
-`note_delete`. It resolves the note exactly like `note_get` and `note_update`,
-but in `LAB_MODE=vuln` it never calls `requireOrgAccess(session, note)`. The fix
-is that one line — the same check its siblings already perform. See the comment
-block in [`src/tools.js`](src/tools.js) above `note_delete`.
-</details>
-
----
-
-## Scenario S2 — Scope-as-param
-
-**Tool:** `note_search`  
-**Class:** CWE-639 — client-supplied scope parameter trusted as authorization  
-**Toggle:** `LAB_S2`
-
-`note_search` accepts an optional `org_id` parameter, documented as "admin use."
-In vuln mode the server uses it unconditionally — any caller can set it to any
-other org's id and receive that org's notes. The server authenticates *who you
-are* correctly, but then trusts the caller's assertion about *whose data to return*.
-
-**Challenge:** Alice (org Acme) calls `note_search`. How does she read Globex's
-notes without knowing any note ids, using only one tool?
-
-<details>
-<summary>Hint</summary>
-
-Look at the `note_search` input schema. There is a parameter that is supposed to
-be admin-only. What happens if you supply it as an ordinary user?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-Alice calls `note_search` with `org_id="org_globex"`. In `LAB_S2=vuln` the server
-substitutes her session's `orgId` with the supplied value and returns Globex's notes.
-The fix: in `LAB_S2=fixed` the `org_id` parameter is accepted (removing it would
-be a breaking API change) but silently ignored; `session.orgId` is always used.
-</details>
-
----
-
-## Scenario S3 — List→get asymmetry
-
-**Tool:** `note_batch_get`  
-**Class:** CWE-862 — inconsistent authorization between list and fetch  
-**Toggle:** `LAB_S3`
-
-`note_list` safely returns only the caller's org's notes. But `note_batch_get`
-accepts an array of explicit ids and resolves each one directly from storage
-*without re-applying the org scope check*. An attacker who knows (or guesses)
-note ids from another org can mix them into the batch and receive them.
-
-**Challenge:** Alice can call `note_list` and gets only her own notes. She
-suspects the ids from other orgs are guessable (they are: `n_acme_1`,
-`n_globex_1`, …). How does she read a Globex note?
-
-<details>
-<summary>Hint</summary>
-
-`note_batch_get` accepts a list of ids. What happens when you mix ids from
-different orgs in the same request?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-Alice calls `note_batch_get` with `ids: ["n_acme_1", "n_globex_1"]`. In
-`LAB_S3=vuln` both are resolved and returned — the batch skips per-object org
-checks. The fix: in `LAB_S3=fixed` the resolved notes are filtered to
-`session.orgId` before returning, so `n_globex_1` is silently dropped.
-</details>
-
----
-
-## Scenario S4 — Wildcard/sentinel bypass
-
-**Tool:** `note_export`  
-**Class:** CWE-639 — sentinel value short-circuits scope filter  
-**Toggle:** `LAB_S4`
-
-`note_export` exports all notes for a given org. A magic sentinel value (`"*"` or
-`"all"`) is documented as "admin only" for a global export. In vuln mode the
-server honors it from **any** authenticated caller — letting them dump every note
-from every tenant in a single call.
-
-**Challenge:** Alice wants to export data from all three orgs (Acme, Globex,
-Initech) in one call. She has only a user-level token. How?
-
-<details>
-<summary>Hint</summary>
-
-Read the `note_export` tool description. There is a "magic value" mentioned.
-What happens if a non-admin user passes it?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-Alice calls `note_export` with `org_id="*"`. In `LAB_S4=vuln` the server
-recognizes the sentinel and calls `store.listAllNotes()` — returning all 6 notes
-from all 3 orgs. The fix: in `LAB_S4=fixed` the `org_id` parameter is ignored
-entirely; the server always exports only `session.orgId`.
-</details>
-
----
-
-## Scenario S5 — Role/token-type bypass
-
-**Tool:** `note_admin_get`  
-**Class:** CWE-863 — role/token-type bypass  
-**Toggle:** `LAB_S5`
-
-The tool is named and documented as admin-only. In vuln mode nothing actually
-checks that the caller holds the admin role — any valid token reaches the
-cross-org lookup. Naming a tool `admin_*` is documentation, not enforcement.
-
-**Challenge:** Bob (org Globex, an ordinary user) wants to read Acme's note
-`n_acme_1` using an "admin" tool he was never granted access to. How?
-
-<details>
-<summary>Hint</summary>
-
-Bob's own token is unprivileged. Does `note_admin_get` actually verify that
-before resolving the note?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-Bob calls `note_admin_get` with `id="n_acme_1"` using `bob-token`. In
-`LAB_S5=vuln` the server resolves and returns the note — it never checked
-whether Bob's session role is `"admin"`. The fix: `LAB_S5=fixed` calls
-`requireAdminRole(session)` before the lookup; ordinary tokens are denied,
-while Dana's real admin token (`dana-token`) still succeeds. See
-[`src/auth.js`](src/auth.js)'s `requireAdminRole()` and the comment block
-above `note_admin_get` in [`src/tools.js`](src/tools.js).
-</details>
-
----
-
-## Scenario S6 — Foreign-parent injection
-
-**Tool:** `note_create_in_org`  
-**Class:** CWE-639 — client-supplied parent/org trusted on create  
-**Toggle:** `LAB_S6`
-
-A cross-team collaboration tool lets a caller create a note "inside" a
-specified org. In vuln mode the server trusts the caller-supplied `org_id`
-with no membership check — any caller can inject a note into an org they do
-not belong to. Unlike S1-S5 (all reads or a delete), this is a **write-side**
-BOLA: it poisons another tenant's data instead of leaking it.
-
-**Challenge:** Alice (org Acme) wants to plant a note that shows up in
-Globex's `note_list`, despite never being a Globex member. How?
-
-<details>
-<summary>Hint</summary>
-
-`note_create_in_org` takes an `org_id` parameter. What org does the note
-actually end up in if Alice supplies someone else's?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-Alice calls `note_create_in_org` with `org_id="org_globex"`. In
-`LAB_S6=vuln` the note is created with `orgId: "org_globex"` — it will show
-up the next time Bob calls `note_list` or `note_search`, despite Alice never
-being a Globex member. The fix: `LAB_S6=fixed` still accepts `org_id` in the
-schema (removing it would be a breaking change, same convention as S2/S4)
-but ignores it; the note is always created inside `session.orgId`.
-</details>
-
----
-
-## Scenario S7 — Unscoped query
-
-**Tool:** `note_get_by_query`  
-**Class:** CWE-639 — tenant key omitted from a scoped query  
-**Toggle:** `LAB_S7`
-
-S1's outlier is a **missing guard call**: resolve a note by id, then forget to
-call `requireOrgAccess`. Real MCP servers rarely look like that. They bind the
-tenant *into* the query — `repo.findOneBy({ id, workspaceId })` — so there is no
-separate guard line to omit. The bug in that world is quieter: the tenant key is
-simply left out of the filter, and the query matches on `id` alone.
-
-This is the shape **CVE-2026-54052** (n8n, CVSS 9.6) took — a table fetched by a
-sequential id with the tenant column left out of the `WHERE`, letting any caller
-read another tenant's stored secrets. It is also the pattern this lab's own
-detection rule (`mcp-unscoped-query-object-fetch`) was written to catch, because
-a guard-call detector never sees it: there is no guard call to be missing.
-
-**Challenge:** Alice (org Acme) wants to read a Globex note by its id through
-`note_get_by_query`, despite never being a Globex member. Why does it work?
-
-<details>
-<summary>Hint</summary>
-
-The tool resolves the note through a filtered query. What does the filter
-contain in vuln mode — and what one key is missing from it?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-In `LAB_S7=vuln` the tool calls `store.findNoteBy({ id })` — the filter carries
-only the caller-supplied `id`, so the query matches any note with that id
-regardless of org, and Alice reads Globex's note. The fix (`LAB_S7=fixed`) binds
-the tenant key into the same query: `store.findNoteBy({ id, orgId: session.orgId })`,
-so a cross-org id resolves to nothing. Note there is no `requireOrgAccess` call
-in either build — the authorization *is* the tenant key in the filter, which is
-exactly why the S1-style "look for the missing guard" reflex walks past it.
-</details>
-
----
-
-## Scenario S8 — Resource-URI-as-scope
-
-**Resource:** `note://{token}/{orgId}/{noteId}`
-**Class:** CWE-639 — a caller-writable URI segment trusted as scope
-**Toggle:** `LAB_S8`
-
-S1-S7 are all tools (`tools/call`). This one lives on `resources/*`, a
-separate MCP primitive with its own registration API, its own handler
-signature (`(uri, variables)` instead of a single args object), and its own
-client-side call (`resources/read`). A review that reads "every tool" never
-sees it.
-
-The resource template turns the tenant into a URI path segment — which the
-*caller* writes. In vuln mode the handler trusts that segment as the scope.
-Identity still comes from the `{token}` segment, resolved through the same
-`resolveSession()` every tool uses; only the *scope* segment is the planted
-bug. It is also quieter than a tool-call exploit: many MCP hosts gate tool
-calls behind an approval prompt but treat a resource read as inert reference
-material, with lighter or no approval at all.
-
-**Challenge:** Alice (org Acme) wants to read a Globex note through
-`resources/read`, despite never being a Globex member, and without calling a
-single tool.
-
-<details>
-<summary>Hint</summary>
-
-The URI template has three variables: `token`, `orgId`, `noteId`. One is who
-you are. One is what you want. What is the third one actually used for?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-In `LAB_S8=vuln` the handler reads `note://alice-token/org_globex/n_globex_1`,
-resolves Alice's session from `token`, then uses the `orgId` *path segment* —
-not the session's own org — as the scope: `store.findNoteBy({ id: noteId,
-orgId })`. The fix (`LAB_S8=fixed`) ignores that segment and uses
-`session.orgId` instead. The URI template still carries `{orgId}` in both
-builds — removing it would be a breaking template change — it is simply never
-trusted as authorization.
-</details>
-
----
-
-## Scenario S9 — Authz-from-client-round-tripped-value
-
-**Tools:** `note_share_prepare`, `note_share_redeem`
-**Class:** CWE-639 — a value round-tripped through the client trusted as authorization
-**Toggle:** `LAB_S9`
-
-`note_share_prepare` is correctly authorized: it mints an opaque grant for a
-note the caller's own session can already access. `note_share_redeem` decodes
-that grant and serves whatever note id is inside it — on the assumption that
-"the grant must have come from an authorized tool." The grant is a plain
-client-side string between the two calls, with no cryptographic signature; a
-caller can decode it, edit it, and redeem the edited version.
-
-This is the shape a tool-chaining flow takes in MCP specifically: there is no
-server-side continuity between two `tools/call` invocations. Every value that
-crosses the gap between them travels through the client — and in an agentic
-pipeline, through the calling model's own context, where it can be edited or
-mangled without any deliberate tampering at all. "A prior tool already
-checked this" is a client-side claim, not a server-verified fact.
-
-**Challenge:** Alice (org Acme) prepares a share grant for her own note. She
-never authenticates as anyone else. How does she end up reading Globex's note?
-
-<details>
-<summary>Hint</summary>
-
-Look closely at what `note_share_prepare` actually returns. Is it opaque, or
-does it just look opaque?
-</details>
-
-<details>
-<summary>Answer</summary>
-
-The grant is base64url-encoded JSON, not a signed token. Alice decodes it,
-finds `{"noteId": "n_acme_1"}`, rewrites it to `{"noteId": "n_globex_1"}`,
-re-encodes it, and calls `note_share_redeem` with the tampered grant. In
-`LAB_S9=vuln` the tool resolves and returns whatever note the decoded grant
-names, with no re-check against Alice's session. The fix (`LAB_S9=fixed`)
-treats the decoded value as a hint, not an authorization: it calls
-`requireOrgAccess(session, note)` on the resolved note before returning it —
-the same object-level check every other scenario in this lab teaches, applied
-at the point a round-tripped client value is trusted again.
-</details>
-
----
-
-## Scenario S10 — Forwarded-header-as-scope
-
-**Tool:** `note_get_scoped`  **Class:** CWE-639 / CWE-290 — a client-supplied request header trusted as scope  **Toggle:** `LAB_S10`  ·  **Transport:** HTTP only (`src/http-server.js`)
-
-Every other scenario reads its scope from a tool argument or a resource URI.
-S10 reads it from an HTTP request **header**. Over the streamable-HTTP transport
-the SDK hands each tool call the request headers in `extra.requestInfo.headers`,
-and `note_get_scoped` trusts an `X-Org-Id` header — "set by the gateway" — as the
-org scope. But any client talking to the server directly sets that header
-itself, so it is client-controlled input wearing the costume of infrastructure.
-This is the transport-layer sibling of S2, and the real-world class of
-*trusting `X-Forwarded-For` for a security decision* (the IP-scoping variant is
-the same bug, same fix). Because stdio carries no request headers, the bug only
-exists in the HTTP deployment — which is why S10 ships its own
-`src/http-server.js`, and why a review that only exercises the stdio server
-never sees it.
-
-**Challenge:** You are Alice (`alice-token`, org Acme). Connect an MCP client to
-`http://127.0.0.1:3010/mcp` and read Globex's notes using one extra request
-header. See [`challenges/s10.md`](challenges/s10.md).
-
----
-
-## Scenario S11 — Forwarded-header quota bypass
-
-**Tool:** `note_create_limited`  **Class:** CWE-639 / CWE-290 — a client-supplied request header keys a rate limit  **Toggle:** `LAB_S11`  ·  **Transport:** HTTP only (`src/http-server.js`)
-
-S11 is the quota sibling of S10. `note_create_limited` allows three notes per
-client, and the vulnerable build decides *which client* from the
-`X-Forwarded-For` request header. A caller who has used up the quota sends a
-new header value and is, as far as the server can tell, a new client. The fixed
-build keys the quota to the session user, so the header no longer changes whose
-quota is counted. Like S10, the bug needs request headers and therefore only
-exists over HTTP.
-
-**Challenge:** You are Alice (`alice-token`), already at the three-note limit.
-Create a fourth note with one extra request header. See
-[`challenges/s11.md`](challenges/s11.md).
-
----
-
-## Scenario S12 — Batch resolve without a per-item check
-
-**Tool:** `note_batch_resolve`  **Class:** CWE-639 / CWE-862 — a multi-object endpoint without a per-item tenant filter  **Toggle:** `LAB_S12`
-
-`note_batch_resolve` takes a list of note ids and resolves each one. The
-vulnerable build returns every note it finds; the fixed build drops any
-resolved note whose `orgId` is not the caller's. Unlike S3 there is no sibling
-"list" tool to compare against — the batch endpoint is the only door, and it
-checks the caller once for the whole batch instead of once per object.
-
-**Challenge:** You are Alice (`alice-token`, org Acme). Read Globex's
-`n_globex_1` by putting it in a batch next to one of your own notes. See
-[`challenges/s12.md`](challenges/s12.md).
-
----
-
-## Scenario S13 — Token scope claim trusted as permission
-
-**Tool:** `note_get_by_token_scope`  **Class:** CWE-639 / CWE-290 — a scope/aud claim trusted instead of the session  **Toggle:** `LAB_S13`
-
-`note_get_by_token_scope` accepts an optional `scope` value standing in for a
-token's `aud`/`scope` claim, and the vulnerable build uses it to choose whose
-notes to return. The token proves *who* the caller is; it does not prove what
-the caller may read. The fixed build ignores the claim and derives the scope
-from the resolved session.
-
-**Challenge:** You are Alice (`alice-token`, org Acme). Read Globex's notes by
-presenting a scope claim of `org_globex`. See
-[`challenges/s13.md`](challenges/s13.md).
-
----
-
-## Detection rules — automate the hunt
+## Detection rules
 
 [`detection/`](detection/README.md) ships 45 [Semgrep](https://semgrep.dev)
-rules — one per code shape above, with Python siblings where the JavaScript
-spelling cannot parse as Python, plus Go, Rust, Kotlin, Java, Ruby, PHP, C#,
-and Swift language packs — that flag these patterns in **your own**
-MCP server source, not just this lab's. **Eleven of them run against
-Python as well as JavaScript/TypeScript**, which matters because the
-reference MCP SDKs ship in both.
+rules that flag these patterns in your own MCP server source, not just this
+lab's. There is one per code shape above, with Python siblings where the
+JavaScript spelling cannot parse as Python, plus Go, Rust, Kotlin, Java, Ruby, PHP, C#,
+and Swift language packs. Eleven of them run against Python as well as
+JavaScript/TypeScript, which matters because the reference MCP SDKs ship in both.
 
-Honestly documented, and re-measured in this release: the earlier claim that
-the rules "catch 5 of 7 scenarios" against this lab's own source implied the
-S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
-no toggle, guard simply absent — both fire exactly as designed; the only code
-they go quiet on is a handler where the guard is *written but gated behind a
-runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
-the measured decision and the fixtures pinning it). With S12 and S13
-added, the current measurement against this lab's own source is **7 of the 13
-scenarios flagged (S1, S2, S6, S7, S8, S12, S13)**. The remaining six stay
-quiet: S3-S5 and S9-S11 sit behind a runtime toggle (this lab's own
-scaffolding) or, for S10/S11, a transport-header shape the JS rules match only
-in the language packs — see [`detection/README.md`](detection/README.md) for
-the per-scenario breakdown and the fixtures pinning it. S9 has no
-dedicated rule: the existing `mcp-missing-object-authz-check` (S1's rule)
-already catches its vulnerable shape, since the fix path is a plain
-`$OBJ = store.get...(); ...; return ok($OBJ)` span with no guard call in
-between — see [`detection/README.md`](detection/README.md) for the measured
-caveat (it only catches the assignment-carrying spelling, not an inline
-`return ok(store.getNote(...))` with no local variable). Against the
-official `@modelcontextprotocol/sdk` the ruleset produces **zero findings**,
-measured with a planted canary proving the scan actually reached the tree
-(semgrep silently skips `node_modules`, so an unverified `0` is not a
-result).
-
-Two rules were hardened in this release against false positives found in a
-9-repo audit:
-- `mcp-authz-scope-from-request-header` (+ `-py`): now requires the header
-  value to reach an **authorization decision** (store call selecting tenant
-  scope), not merely be read. Two-way canary: FIRE on scope decision, SILENT
-  on logging-only read.
-- `mcp-wildcard-sentinel-scope-bypass`: now requires the wildcard to be in an
-  **authorization bypass context** (gates scope widening), not a textual
-  comparison. Two-way canary: FIRE on authz bypass, SILENT on markup/UI filter.
-
-Real-capture fixtures from the audit validate both hardenings: `xff-for-logging.js/.py`
-(SILENT), `wildcard-in-markup.js` (SILENT), and `xff-for-ratelimit.js` (FIRE for
-the new S11 rule).
+Measured against this lab's own source, the rules flag 7 of the 13 scenarios (S1, S2,
+S6, S7, S8, S12, S13). The other six sit behind a runtime toggle or a
+transport-header shape. Against the official `@modelcontextprotocol/sdk` the ruleset
+produces zero findings, measured with a planted canary that proves the scan reached
+the tree. The per-scenario breakdown is in [`detection/README.md`](detection/README.md)
+and the measurement notes are in [`docs/detection-notes.md`](docs/detection-notes.md).
 
 Drop it into your own MCP server's CI as a GitHub Action. Findings upload to
 your repo's Security tab, so the calling workflow needs
@@ -610,47 +180,11 @@ steps:
       path: src/   # your MCP server source
 ```
 
-## How it is built
+## Run modes
 
-| File | Role |
-|---|---|
-| [`src/store.js`](src/store.js) | In-memory multi-tenant seed data: 3 tenant orgs (*Acme/Alice*, *Globex/Bob*, *Initech/Carol*, 2 notes each) + 1 admin org (*Platform Ops/Dana*, no notes). |
-| [`src/auth.js`](src/auth.js) | `resolveSession(token)` → server-trusted `{ user, org, role }`; `requireOrgAccess(session, object)` — the object-level check; `requireAdminRole(session)` — the role check. |
-| [`src/tools.js`](src/tools.js) | Eighteen tools plus one resource (`note://{token}/{orgId}/{noteId}`). Thirteen planted-bug handlers (one per scenario, S1-S13). |
-| [`src/server.js`](src/server.js) | Stdio MCP server. Reads `LAB_MODE`/`LAB_S1..S13` env vars, passes a `modes` object to `registerTools`. |
-| [`src/http-server.js`](src/http-server.js) | Streamable-HTTP MCP server (for S10/S11). Same tools/store, transports headers via `extra.requestInfo.headers`. |
-| [`poc/exploit.js`](poc/exploit.js) | MCP client running the 38-row two-way gate: all 13 scenarios in isolation, plus the all-`fixed` hardened build. |
-| [`test/`](test/) | `node --test` suite (70 tests): `auth.js`/`store.js` unit tests with no MCP transport, `docs-consistency` (docs and citation checked against the code), `ci-hardening` (the action's and workflows' supply-chain and privilege rules), and `security-hardening` plus `readme-poc-output`, which start the server. |
-
-**Identity model (deliberate simplification).** Each tool takes a bearer `token`
-the server resolves to a fixed user, org, and role. The caller never asserts its
-own org or role — only presents a token. In a production MCP server this identity
-would come from the transport / OAuth layer; the lab passes it per call so it
-stays a single process and the authorization logic is explicit and easy to read.
-
----
-
-## Environment variables
-
-Each scenario is controlled by an independent env var (all default to `"vuln"`):
-
-| Var | Controls | Vuln behaviour | Fixed behaviour |
-|---|---|---|---|
-| `LAB_MODE` / `LAB_S1` | S1 — `note_delete` | Cross-tenant delete succeeds | `requireOrgAccess()` blocks it |
-| `LAB_S2` | S2 — `note_search` | `org_id` param overrides session scope | `org_id` ignored; session scope always used |
-| `LAB_S3` | S3 — `note_batch_get` | All resolved notes returned regardless of org | Notes filtered to `session.orgId` |
-| `LAB_S4` | S4 — `note_export` | `org_id="*"/"all"` dumps all tenants | `org_id` ignored; own org only |
-| `LAB_S5` | S5 — `note_admin_get` | No role check; any token reaches cross-org lookup | `requireAdminRole()` blocks non-admins |
-| `LAB_S6` | S6 — `note_create_in_org` | `org_id` param trusted as write target | `org_id` ignored; note created in session's own org |
-| `LAB_S7` | S7 — `note_get_by_query` | tenant key omitted from the query filter; any org's id resolves | `orgId` bound into the same filter |
-| `LAB_S8` | S8 — `note://` resource | `orgId` URI path segment trusted as scope | URI segment ignored; session's own org used |
-| `LAB_S9` | S9 — `note_share_redeem` | decoded grant's `noteId` trusted with no session re-check | `requireOrgAccess()` re-checked against the resolved note |
-| `LAB_S10` | S10 — `note_get_scoped` | `X-Org-Id` header trusted as scope (HTTP) | Header ignored; session scope always used |
-| `LAB_S11` | S11 — `note_create_limited` | `X-Forwarded-For` header as quota key (HTTP) | Quota keyed to session; header ignored |
-| `LAB_S12` | S12 — `note_batch_resolve` | Batch returns all resolved notes regardless of org | Each resolved note filtered to `session.orgId` |
-| `LAB_S13` | S13 — `note_get_by_token_scope` | Token's scope/aud claim trusted as scope | Scope claim ignored; session scope always used |
-
-Run all scenarios in their fixed state:
+The lab is a multi-tenant note server exposing eighteen MCP tools and one MCP resource
+across thirteen independent BOLA scenarios. Each scenario has its own toggle, `LAB_S1`
+to `LAB_S13`, and every toggle defaults to `vuln`. Run all scenarios in their fixed state:
 
 ```bash
 # Linux / macOS
@@ -660,71 +194,104 @@ LAB_S1=fixed LAB_S2=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LA
 $env:LAB_S1='fixed'; $env:LAB_S2='fixed'; $env:LAB_S3='fixed'; $env:LAB_S4='fixed'; $env:LAB_S5='fixed'; $env:LAB_S6='fixed'; $env:LAB_S7='fixed'; $env:LAB_S8='fixed'; $env:LAB_S9='fixed'; $env:LAB_S10='fixed'; $env:LAB_S11='fixed'; $env:LAB_S12='fixed'; $env:LAB_S13='fixed'; npm start
 ```
 
-Isolate one scenario (e.g. test only S2):
+What each toggle changes, and how to isolate one scenario, is in
+[`docs/configuration.md`](docs/configuration.md).
 
-```bash
-LAB_S2=vuln LAB_S1=fixed LAB_S3=fixed LAB_S4=fixed LAB_S5=fixed LAB_S6=fixed LAB_S7=fixed LAB_S8=fixed LAB_S9=fixed LAB_S10=fixed LAB_S11=fixed LAB_S12=fixed LAB_S13=fixed npm start
-```
+## More documentation
 
----
+- [`docs/scenarios.md`](docs/scenarios.md): one walkthrough per scenario.
+- [`docs/hunt-checklist.md`](docs/hunt-checklist.md): what to read when auditing a real multi-tenant MCP server.
+- [`docs/architecture.md`](docs/architecture.md): the file map and the identity model.
+- [`docs/configuration.md`](docs/configuration.md): the environment variables.
+- [`docs/detection-notes.md`](docs/detection-notes.md): what the rules were measured to catch and miss.
 
-## Hunt checklist — object-level authorization in MCP
+## Scenario reference
 
-Use this when auditing a real multi-tenant MCP server (one you own or are
-authorized to test). The bug class is "the server authenticates *who you are*
-but forgets to check *whether you may touch this object*":
+Rule messages link to the headings below. Each one points to its challenge and walkthrough.
 
-- [ ] **Client-supplied scope trusted as authorization (→ S2).** A tool takes an
-  `org_id` / `project_id` / `tenant_id` argument and uses it to *scope the query*
-  instead of *checking it against the caller's membership*.
-- [ ] **Membership check decoupled from object resolution.** The tool verifies
-  the caller belongs to some org/project, but loads the object by a *different* id
-  without confirming the object lives under that membership.
-- [ ] **Inconsistent authorization — the single outlier (→ S1).** Most object
-  tools check; one or two do not. Read **every** tool that resolves an object by id.
-  The forgotten one is usually a less-glamorous verb (`delete`, `archive`, `export`).
-- [ ] **Reads guarded, mutations not.** `get`/`list` are scoped but `update`/`delete`
-  slipped through — or vice-versa.
-- [ ] **Wildcard / sentinel short-circuit (→ S4).** A special value (`'all'`,
-  `'*'`, empty, `0`, `null`) skips the scope filter entirely.
-- [ ] **Role / token-type bypass (→ S5).** An "admin" or "service" code path
-  skips the per-object check.
-- [ ] **List → get asymmetry (→ S3).** `list` only returns your org's objects, so
-  ids feel "private" — but `get`/`batch-get` accept *any* id and the ids are
-  guessable or enumerable.
-- [ ] **Create/update accepting a foreign parent (→ S6).** `create(parent_id=…)`
-  accepts a parent the caller is not a member of, injecting an object into
-  another tenant.
-- [ ] **Resource URI segment trusted as scope (→ S8).** A `resources/read`
-  handler binds a tenant/scope key straight from a URI template variable
-  instead of the session — easy to miss because a review that only reads
-  `tools/*` handlers never looks at `resources/*` at all.
-- [ ] **A value round-tripped through the client trusted as authorization
-  (→ S9).** A tool decodes a token/grant/cursor produced by an earlier tool
-  call and serves the object it names, with no re-check against the current
-  session — "an earlier tool already authorized this" is a client-side
-  claim, not a server fact, and it is not fixed by making the value
-  cryptographically signed if the redeeming tool never re-checks it.
+## Scenario S1 — Missing org-scope check (the original)
 
-The exploit primitive is always the same: authenticate as tenant **B**, call the
-suspect tool with an object or scope that belongs to tenant **A**, and see whether
-you get **A**'s data (or mutate it). Confirm a fix the same way the PoC here does
-— **two-way**: the cross-tenant call must be blocked *and* the legitimate
-same-tenant call must still succeed.
+Inconsistent authorization: find the single outlier. `note_delete`, CWE-639 / CWE-862, toggle `LAB_MODE` / `LAB_S1`.
+[Challenge](challenges/s1.md), [walkthrough](docs/scenarios.md#scenario-s1--missing-org-scope-check-the-original).
 
----
+## Scenario S2 — Scope-as-param
+
+Client-supplied scope trusted as authorization. `note_search`, CWE-639, toggle `LAB_S2`.
+[Challenge](challenges/s2.md), [walkthrough](docs/scenarios.md#scenario-s2--scope-as-param).
+
+## Scenario S3 — List→get asymmetry
+
+List→get asymmetry: batch skips per-object check. `note_batch_get`, CWE-862, toggle `LAB_S3`.
+[Challenge](challenges/s3.md), [walkthrough](docs/scenarios.md#scenario-s3--listget-asymmetry).
+
+## Scenario S4 — Wildcard/sentinel bypass
+
+Wildcard/sentinel value bypasses scope filter. `note_export`, CWE-639, toggle `LAB_S4`.
+[Challenge](challenges/s4.md), [walkthrough](docs/scenarios.md#scenario-s4--wildcardsentinel-bypass).
+
+## Scenario S5 — Role/token-type bypass
+
+Role/token-type bypass: admin-named tool, no role check. `note_admin_get`, CWE-863, toggle `LAB_S5`.
+[Challenge](challenges/s5.md), [walkthrough](docs/scenarios.md#scenario-s5--roletoken-type-bypass).
+
+<a id="scenario-s6--foreign-parent"></a>
+
+## Scenario S6 — Foreign-parent injection
+
+Foreign-parent injection: create trusts a caller-supplied org. `note_create_in_org`, CWE-639, toggle `LAB_S6`.
+[Challenge](challenges/s6.md), [walkthrough](docs/scenarios.md#scenario-s6--foreign-parent-injection).
+
+## Scenario S7 — Unscoped query
+
+Unscoped query: tenant key omitted from the filter (the real-world shape). `note_get_by_query`, CWE-639, toggle `LAB_S7`.
+[Challenge](challenges/s7.md), [walkthrough](docs/scenarios.md#scenario-s7--unscoped-query).
+
+## Scenario S8 — Resource-URI-as-scope
+
+Resource-URI-as-scope: the resources/read surface, not tools/call. `note://{token}/{orgId}/{noteId}`, CWE-639, toggle `LAB_S8`.
+[Challenge](challenges/s8.md), [walkthrough](docs/scenarios.md#scenario-s8--resource-uri-as-scope).
+
+## Scenario S9 — Authz-from-client-round-tripped-value
+
+Authz-from-client-round-tripped-value: an editable share grant. `note_share_prepare`, `note_share_redeem`, CWE-639, toggle `LAB_S9`.
+[Challenge](challenges/s9.md), [walkthrough](docs/scenarios.md#scenario-s9--authz-from-client-round-tripped-value).
+
+## Scenario S10 — Forwarded-header-as-scope
+
+Forwarded-header-as-scope: a trusted request header (HTTP transport). `note_get_scoped`, CWE-639 / CWE-290, toggle `LAB_S10`.
+[Challenge](challenges/s10.md), [walkthrough](docs/scenarios.md#scenario-s10--forwarded-header-as-scope).
+
+<a id="scenario-s11--xff-quota-bypass"></a>
+
+## Scenario S11 — Forwarded-header quota bypass
+
+X-Forwarded-For quota bypass: a trusted request header for rate limiting (HTTP transport). `note_create_limited`, CWE-639 / CWE-290, toggle `LAB_S11`.
+[Challenge](challenges/s11.md), [walkthrough](docs/scenarios.md#scenario-s11--forwarded-header-quota-bypass).
+
+## Scenario S12 — Batch resolve without a per-item check
+
+Batch/bulk endpoint BOLA: multi-object endpoint without per-item tenant filter. `note_batch_resolve`, CWE-639 / CWE-862, toggle `LAB_S12`.
+[Challenge](challenges/s12.md), [walkthrough](docs/scenarios.md#scenario-s12--batch-resolve-without-a-per-item-check).
+
+<a id="scenario-s13--jwt-token-scope-confusion"></a>
+
+## Scenario S13 — Token scope claim trusted as permission
+
+JWT/token scope confusion: token's scope/aud claim vs actual permissions mismatch. `note_get_by_token_scope`, CWE-639 / CWE-290, toggle `LAB_S13`.
+[Challenge](challenges/s13.md), [walkthrough](docs/scenarios.md#scenario-s13--token-scope-claim-trusted-as-permission).
 
 ## Safety / scope
 
-- **Vulnerable by design.** Do **not** deploy this on a reachable network or use
-  it as a starting point for real code. Run it locally for learning only.
-- **Synthetic.** All orgs, users, notes, and tokens are made up. There is no
-  real data, no real target, and the PoC never makes a network request — it only
-  spawns the local server process over stdio.
+This server is vulnerable by design. Do not deploy it on a reachable network or use
+it as a starting point for real code. Run it locally for learning only.
+
+Everything in it is synthetic. The orgs and users are made up, and so are their notes
+and tokens; there is no real target. The PoC never makes a network request. It only
+spawns the local server process over stdio.
 
 ## Contributing
 
-The most useful contribution to a detection ruleset is a **false positive** —
+The most useful contribution to a detection ruleset is a false positive:
 a rule that fires on correctly authorized code. A gate wider than the defect
 it targets gets switched off, and a switched-off rule protects nothing, so
 those are treated as real defects here. Misses are just as welcome; the rules
@@ -732,16 +299,16 @@ catch 7 of the 13 scenarios against this lab's own source and
 [`detection/README.md`](detection/README.md) says why.
 
 There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has
-the fixture convention, the exact-count CI gate, and the multi-language rule
-trap that costs an afternoon if you meet it the hard way.
+the fixture convention and the exact-count CI gate. It also describes the
+multi-language rule trap that costs an afternoon if you meet it the hard way.
 
 Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
-Security reports go through [`SECURITY.md`](SECURITY.md) — and please do not
+Security reports go through [`SECURITY.md`](SECURITY.md). Please do not
 report the planted flaws; they are the point.
 
 ## Citing this
 
-[`CITATION.cff`](CITATION.cff), or use GitHub's **Cite this repository** button.
+[`CITATION.cff`](CITATION.cff), or use GitHub's "Cite this repository" button.
 
 ## License
 

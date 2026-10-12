@@ -8,9 +8,9 @@ code, not just this lab's.
 
 ## What's here
 
-[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 20
+[`semgrep/mcp-object-authz.yml`](semgrep/mcp-object-authz.yml) — 21
 [Semgrep](https://semgrep.dev) rules covering the shapes from the thirteen lab
-scenarios. Twelve of the twenty run against **Python as well as
+scenarios. Twelve of the twenty-one run against **Python as well as
 JavaScript/TypeScript**: three shared rules declare both, and nine `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
 (`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **45 rules across the `detection/semgrep/` directory** — the table lists all of them:
@@ -36,6 +36,8 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-authz-scope-from-request-header-py` | S10 (Python) | the FastMCP spelling: the same scope-shaped header read via `get_http_headers()` / a `.get()` or subscript, **used in an authz decision**. **WARNING** |
 | `mcp-ratelimit-scope-from-forwarded-header` | S11 | a client-identity header (`X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`, ...) read from `extra.requestInfo.headers` and **used as a quota/rate-limit key**; keyed on the header **name** and **usage**, so a non-quota header read for logging stays silent. **WARNING** |
 | `mcp-ratelimit-scope-from-forwarded-header-py` | S11 (Python) | the FastMCP spelling: the same client-identity header read via `get_http_headers()` and used as a quota/rate-limit key. **WARNING** |
+| `mcp-token-scope-claim-overrides-session` | S13 | a `scope`/`aud` argument, mirroring a token claim, used as a fallback/override for the session's own scope. Matches those two names only; the `org_id`/`user_id` spelling stays with the S2 rule, so one line gets one finding. Silent after a `requireOrgAccess(...)` call |
+| `mcp-token-scope-claim-overrides-session-py-ternary` | S13 (Python) | the `x if x else y` spelling of the same claim override; silent after a `require_org_access(...)` call |
 | `mcp-missing-object-authz-check-go` | S1 (Go) | object resolved by `$STORE.$GETMETHOD($ID)`, mutated with no `Require*Access`/`Check*Access`/`Assert*Owner` call (exported and unexported spelling) in between |
 | `mcp-client-supplied-scope-overrides-session-go` | S2 (Go) | Go's zero-value-fallback spelling of the override (`scope := args.OrgID; if scope == "" { scope = session.OrgID }`) — Go has no `||`/`??`/ternary, so the JS/PY override shape doesn't port directly |
 | `mcp-unscoped-query-object-fetch-go` | S7 (Go) | the struct/ORM primary-key lookup idiom, `$DB.First(&$X, $ID)`, with no tenant key bound into the same query. **WARNING**, same honesty as its JS/PY siblings — and a narrower one: a raw-SQL-string lookup is a Go-specific blind spot this rule does not cover (see below) |
@@ -72,7 +74,7 @@ PascalCase/camelCase casing, `:=` short declarations) doesn't parse as
 JavaScript or Python, and a rule with an unparseable pattern silently stops
 matching in *every* language it declares.
 
-Three of the seven scenarios are covered (S1, S2, S7); the honest gap is S7
+Three of the thirteen scenarios are covered (S1, S2, S7); the honest gap is S7
 itself — Go's most common unscoped-fetch shape is a raw SQL string
 (`db.QueryRow("SELECT ... WHERE id = $1", id)`), and a tenant key's absence
 inside a string literal isn't something Semgrep can reliably see. The rule
@@ -293,7 +295,7 @@ The challenges train a human. This is the automatable half: something a
 CI pipeline or a pre-commit hook can run on a real MCP server's source
 without a human reading every tool handler by hand. Neither replaces the
 other — a scanner with the S1/S5 blind spot above still needs the human
-"read every tool that resolves an object by id" habit the hunt checklist
+"read every tool that resolves an object by id" habit the [hunt checklist](../docs/hunt-checklist.md)
 teaches.
 
 ## Related
