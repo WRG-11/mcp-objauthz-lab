@@ -90,7 +90,18 @@ jobs:
               process.exit(1);
             }
             const got = d.results.length;
-            const want = 72; // 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+            const want = 78; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+                             //   2026-10-12: 72->78. Two S13 rules carried the ids of the
+                             //   S2 rules they were copied from
+                             //   (mcp-client-supplied-scope-overrides-session and its
+                             //   -py-ternary sibling). They are now
+                             //   mcp-token-scope-claim-overrides-session (+ -py-ternary),
+                             //   match scope/aud only, and keep their four findings in
+                             //   token-scope-claim-overrides-session.js/.py (2 + 2).
+                             //   The S2 fixtures those copies had overwritten are back:
+                             //   client-supplied-scope-overrides-session.js (3: org_id,
+                             //   user_id, owner_id) and .py (3: two "or" fallbacks, one
+                             //   ternary). Net +6, every one an S2 finding.
                              //   2026-09-14: JS 21->18. The duplicate S12 copy of
                              //   mcp-batch-resolve-missing-per-item-scope-filter (js+py, same
                              //   rule ids as the S3 originals) was removed (dedup). The js copy

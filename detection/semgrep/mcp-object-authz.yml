@@ -1155,12 +1155,12 @@ rules:
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s11--xff-quota-bypass
 
-- id: mcp-client-supplied-scope-overrides-session
+- id: mcp-token-scope-claim-overrides-session
   languages:
   - javascript
   - typescript
   severity: ERROR
-  message: "A client-supplied scope or identity argument can override the server-trusted session scope. Arguments like org_id/tenant_id/ project_id/user_id/owner_id/scope/aud must never select whose data a tool operates on — always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 — see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion"
+  message: "A caller-supplied scope or aud argument, mirroring a token claim, can override the server-trusted session scope. A claim the client can set must never select whose data a tool operates on. Use the session's own scope and ignore (or reject) the caller-supplied value. The org_id/tenant_id/user_id spelling of the same override is mcp-client-supplied-scope-overrides-session. CWE-639. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion"
   patterns:
   - pattern-either:
       - pattern: '$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD'
@@ -1168,7 +1168,7 @@ rules:
       - pattern: '$SCOPEPARAM || $SESSION.$FIELD'
   - metavariable-regex:
       metavariable: $SCOPEPARAM
-      regex: (?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid|scope|aud)$
+      regex: (?i)^(scope|aud)$
   - pattern-not-inside: 'requireOrgAccess(...); ...'
   metadata:
     cwe:
@@ -1178,18 +1178,18 @@ rules:
     references:
     - https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion
 
-- id: mcp-client-supplied-scope-overrides-session-py-ternary
+- id: mcp-token-scope-claim-overrides-session-py-ternary
   languages:
   - python
   severity: ERROR
-  message: "A client-supplied scope or identity argument can override the server-trusted session scope (Python ternary spelling). Arguments like org_id/tenant_id/ project_id/user_id/owner_id/scope/aud must never select whose data a tool operates on — always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 — see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion"
+  message: "A caller-supplied scope or aud argument, mirroring a token claim, can override the server-trusted session scope (Python ternary spelling). A claim the client can set must never select whose data a tool operates on. Use the session's own scope and ignore (or reject) the caller-supplied value. The org_id/tenant_id/user_id spelling of the same override is mcp-client-supplied-scope-overrides-session-py-ternary. CWE-639. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s13--jwt-token-scope-confusion"
   patterns:
   - pattern-either:
       - pattern: '$SCOPEPARAM if $SCOPEPARAM else $SESSION.$FIELD'
       - pattern: '$SCOPEPARAM if $SCOPEPARAM is not None else $SESSION.$FIELD'
   - metavariable-regex:
       metavariable: $SCOPEPARAM
-      regex: (?i)^(org_id|orgid|tenant_id|tenantid|project_id|projectid|account_id|accountid|workspace_id|workspaceid|user_id|userid|owner_id|ownerid|scope|aud)$
+      regex: (?i)^(scope|aud)$
   - pattern-not-inside: 'require_org_access(...); ...'
   metadata:
     cwe:

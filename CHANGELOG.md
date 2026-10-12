@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when an excerpt row is not in that block.
 - `docs-consistency` now checks stated counts across the README and `docs/`
   together, and requires a walkthrough section for every scenario.
+- The two S13 rules have ids of their own:
+  `mcp-token-scope-claim-overrides-session` and
+  `mcp-token-scope-claim-overrides-session-py-ternary`. Since 3.10 they had
+  shipped under the ids of the S2 rules they were copied from, so the ruleset
+  declared those two ids twice. They now match `scope` and `aud` only; the
+  `org_id`/`user_id` names stay with the S2 rules. A `nosemgrep` comment or a
+  SARIF filter that names the S2 id for a `scope`/`aud` finding needs the new
+  id. `CITATION.cff` follows: twelve rules target Python, counted by id.
 
 ### Fixed
 
@@ -37,6 +45,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   findings. The messages are repaired and a test rejects the sequence.
 - `SECURITY.md` pointed at a README hunt checklist; it now links
   `docs/hunt-checklist.md`.
+- A line with an `org_id`-style override was reported twice under one rule
+  id, once by each of the two definitions. It is reported once. Measured on
+  `src/`: 13 findings before, 11 after, on the same lines.
+- The S2 fixtures for JavaScript and Python are back. The 3.10 release
+  overwrote them with the S13 cases, which left
+  `mcp-client-supplied-scope-overrides-session` and its Python ternary
+  sibling with no fixture, the `user_id` case added after CVE-2026-9135
+  included. Both sets now sit side by side
+  (`client-supplied-scope-overrides-session.*` and
+  `token-scope-claim-overrides-session.*`), and the fixture scan expects 78
+  findings instead of 72.
+- `solutions/s13.md` said no rule matched a parameter named `scope`. One has
+  since 3.10; the note now names it.
+- `detection/README.md` said the main rule file holds 20 rules and listed 43
+  ids in a table introduced as complete. The file holds 21, and the table
+  lists all 45.
 
 ## [3.12.3] - 2026-09-22
 

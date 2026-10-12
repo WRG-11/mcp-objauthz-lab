@@ -1,35 +1,47 @@
-// Test fixture for rule: mcp-client-supplied-scope-overrides-session (S13)
-//
-// S13 (JWT/token scope confusion). The token's scope/aud claim (or a parameter
-// mirroring it) is trusted as the authorization scope, overriding the
-// server-trusted session. This is the same pattern as S2 (scope-as-param)
-// but the scope parameter name is "scope" or "aud" instead of "org_id"/"tenant_id".
-//
-// Two-way canary axis: does the code use the caller-supplied scope/aud to
-// override the session? (yes ⇒ FIRE; no ⇒ SILENT)
+// Test fixture for rule: mcp-client-supplied-scope-overrides-session
 
-async function getNotesByTokenScopeVuln({ token, scope }) {
-  const session = resolveSession(token);
+async function vulnSearch({ token, q, org_id }) {
+  const session = resolveSession(store, token);
   // ruleid: mcp-client-supplied-scope-overrides-session
-  const effectiveOrgId = scope ?? session.orgId;
-  return store.listNotesByOrg(effectiveOrgId);
+  const effectiveOrgId = org_id || session.orgId;
+  return ok(store.searchNotesByOrg(effectiveOrgId, q));
 }
 
-async function getNotesByTokenScopeVuln2({ token, aud }) {
-  const session = resolveSession(token);
+async function fixedSearch({ token, q, org_id }) {
+  const session = resolveSession(store, token);
+  // ok: mcp-client-supplied-scope-overrides-session
+  const effectiveOrgId = session.orgId;
+  return ok(store.searchNotesByOrg(effectiveOrgId, q));
+}
+
+// The per-USER spelling of the same bug. CVE-2026-9135 (IBM Langflow) is the
+// shape below, verbatim: an MCP tool that accepts a caller-supplied user_id
+// and uses it to select whose flow to modify. The rule did not cover this
+// name until that CVE showed it was the one attackers actually reach for.
+async function vulnUpdateFlowField({ token, flow_id, field, value, user_id }) {
+  const session = resolveSession(store, token);
   // ruleid: mcp-client-supplied-scope-overrides-session
-  const effectiveOrgId = aud || session.orgId;
-  return store.listNotesByOrg(effectiveOrgId);
+  const effectiveUserId = user_id || session.userId;
+  return ok(store.updateFlowField(effectiveUserId, flow_id, field, value));
 }
 
-async function getNotesByTokenScopeSafe({ token, scope }) {
-  const session = resolveSession(token);
+async function fixedUpdateFlowField({ token, flow_id, field, value, user_id }) {
+  const session = resolveSession(store, token);
   // ok: mcp-client-supplied-scope-overrides-session
-  return store.listNotesByOrg(session.orgId);
+  const effectiveUserId = session.userId;
+  return ok(store.updateFlowField(effectiveUserId, flow_id, field, value));
 }
 
-async function getNotesByTokenScopeSafe2({ token, aud }) {
-  const session = resolveSession(token);
+// owner_id, and the ?? spelling of the fallback.
+async function vulnGetDoc({ token, doc_id, owner_id }) {
+  const session = resolveSession(store, token);
+  // ruleid: mcp-client-supplied-scope-overrides-session
+  const effectiveOwner = owner_id ?? session.ownerId;
+  return ok(store.getDoc(effectiveOwner, doc_id));
+}
+
+async function fixedGetDoc({ token, doc_id, owner_id }) {
+  const session = resolveSession(store, token);
   // ok: mcp-client-supplied-scope-overrides-session
-  return store.listNotesByOrg(session.orgId);
+  return ok(store.getDoc(session.ownerId, doc_id));
 }

@@ -187,6 +187,22 @@ test("detection README lists every rule id in the ruleset", () => {
   );
 });
 
+// ── a rule id names one rule ───────────────────────────────────────────────
+// Two ids were each declared twice: the S13 rules had been appended under the
+// ids of the S2 rules they were copied from. Semgrep ran both definitions, so
+// an `org_id` override was reported twice under one id, and the rule table
+// listed 43 ids under a sentence that said 45. An id is how a reader
+// suppresses or filters a finding; it has to name exactly one rule.
+test("no rule id is declared twice", () => {
+  const ids = readdirSync(join(root, "detection/semgrep"))
+    .filter((f) => f.endsWith(".yml"))
+    .flatMap((f) => [...read(`detection/semgrep/${f}`).matchAll(/^[ \t]*- id:\s*(\S+)/gm)])
+    .map((m) => m[1]);
+  assert.ok(ids.length >= 6, "expected at least six rules");
+  const twice = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  assert.deepEqual(twice, [], "rule ids declared more than once");
+});
+
 // ── SECURITY.md's toggle range covers every scenario ───────────────────────
 test("SECURITY.md's toggle range ends at the last scenario", () => {
   const sec = read("SECURITY.md");
