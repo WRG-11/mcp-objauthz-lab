@@ -6,7 +6,7 @@ rules:
   - python
   severity: ERROR
   message: "An object resolved from storage by a client-supplied id reaches a mutation or response without an authorization/ownership check in between. This is the MCP object-level authorization pattern\
-    \ (BOLA/IDOR, CWE-639/862) \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original\n"
+    \ (BOLA/IDOR, CWE-639/862) \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s1--missing-org-scope-check-the-original\n"
   patterns:
   - pattern-either:
     - patterns:
@@ -320,7 +320,7 @@ rules:
   - python
   severity: ERROR
   message: "A client-supplied scope or identity argument can override the server-trusted session scope. Arguments like org_id/tenant_id/ project_id/user_id must never select whose data a tool operates on\
-    \ \xE2\u20AC\u201D always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param\n"
+    \ \u2014 always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param\n"
   patterns:
   - pattern-either:
     - pattern: '$COND && $SCOPEPARAM ? $SCOPEPARAM : $SESSION.$FIELD'
@@ -416,7 +416,7 @@ rules:
   - typescript
   severity: WARNING
   message: "Multiple objects are resolved by client-supplied ids in a batch, but the surrounding code has no per-item scope filter (e.g. a \".filter(n => n.orgId === session.orgId)\" afterward). A sibling\
-    \ list() tool is often correctly scoped while its batch-get sibling skips the per-object check \xE2\u20AC\u201D the \"list->get asymmetry\" pattern. CWE-862 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry\n"
+    \ list() tool is often correctly scoped while its batch-get sibling skips the per-object check \u2014 the \"list->get asymmetry\" pattern. CWE-862 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry\n"
   patterns:
   - pattern: $IDS.map($F => $STORE.$METHOD($F))
   - metavariable-regex:
@@ -444,8 +444,8 @@ rules:
   - javascript
   - typescript
   severity: ERROR
-  message: "A tool registered with an admin-sounding name never calls a role-check function in its handler. Naming a tool \"admin_*\" / \"*_admin_*\" is documentation, not enforcement \xE2\u20AC\u201D any\
-    \ valid token can reach it unless the handler actually verifies the caller's role. CWE-863 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass\n"
+  message: "A tool registered with an admin-sounding name never calls a role-check function in its handler. Naming a tool \"admin_*\" / \"*_admin_*\" is documentation, not enforcement \u2014 any\
+    \ valid token can reach it unless the handler actually verifies the caller's role. CWE-863 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass\n"
   patterns:
   - pattern: server.registerTool($NAME, $SCHEMA, guard(async ($ARGS) => { ... }))
   - metavariable-regex:
@@ -466,7 +466,7 @@ rules:
   - python
   severity: ERROR
   message: "A client-supplied scope or identity argument can override the server-trusted session scope. Arguments like org_id/tenant_id/project_id/user_id must never select whose data a tool operates on\
-    \ \xE2\u20AC\u201D always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param\n"
+    \ \u2014 always use the session's own scope and ignore (or reject) the caller-supplied value. CWE-639 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s2--scope-as-param\n"
   patterns:
   - pattern-either:
     - pattern: $SCOPEPARAM if $SCOPEPARAM else $SESSION.$FIELD
@@ -528,8 +528,8 @@ rules:
   - typescript
   severity: WARNING
   message: "A create/save call takes its parent or tenant key from a caller-supplied argument rather than the authenticated session. A caller can then plant an object inside a tenant they do not belong\
-    \ to (foreign-parent injection) even when every read path is correctly scoped. Bind the parent to the session's own scope, or verify membership of the supplied value before writing. CWE-639 \xE2\u20AC\
-    \u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent\n"
+    \ to (foreign-parent injection) even when every read path is correctly scoped. Bind the parent to the session's own scope, or verify membership of the supplied value before writing. CWE-639 \
+    \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent\n"
   patterns:
   - pattern: '$STORE.$METHOD({ ..., $KEY: $VAL, ... })'
   - metavariable-regex:
@@ -599,7 +599,7 @@ rules:
   - python
   severity: ERROR
   message: "A tool registered on an admin-sounding function never calls a role-check function in its body. Naming it \"admin_*\" / \"*_admin_*\" documents intent without enforcing it -- any valid token\
-    \ reaches the handler unless the code verifies the caller's role. CWE-863 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass\n"
+    \ reaches the handler unless the code verifies the caller's role. CWE-863 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s5--roletoken-type-bypass\n"
   patterns:
   - pattern-either:
     - pattern: "@$DEC\ndef $FUNC(...):\n    ...\n"
@@ -659,8 +659,8 @@ rules:
   - python
   severity: WARNING
   message: "A create/save call takes its parent or tenant key from a caller-supplied argument rather than the authenticated session. A caller can then plant an object inside a tenant they do not belong\
-    \ to (foreign-parent injection) even when every read path is correctly scoped. Bind the parent to the session's own scope, or verify membership of the supplied value before writing. CWE-639 \xE2\u20AC\
-    \u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent\n"
+    \ to (foreign-parent injection) even when every read path is correctly scoped. Bind the parent to the session's own scope, or verify membership of the supplied value before writing. CWE-639 \
+    \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s6--foreign-parent\n"
   patterns:
   - pattern: $STORE.$METHOD(..., $KEY = $VAL, ...)
   - metavariable-regex:
@@ -700,8 +700,8 @@ rules:
   - typescript
   severity: WARNING
   message: "An MCP resource read callback resolves an object using a URI template variable as the tenant/scope key. A resources/read URI is written entirely by the caller, the same as a tool argument, but\
-    \ it is easy to mistake for a server-controlled path segment because it looks like routing rather than input \xE2\u20AC\u201D and MCP hosts often gate tool calls behind an approval prompt while treating\
-    \ resource reads as inert. Bind the scope from the session resolved from the URI's identity variable instead. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope\n"
+    \ it is easy to mistake for a server-controlled path segment because it looks like routing rather than input \u2014 and MCP hosts often gate tool calls behind an approval prompt while treating\
+    \ resource reads as inert. Bind the scope from the session resolved from the URI's identity variable instead. CWE-639 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope\n"
   patterns:
   - pattern-inside: 'async ($URI, { ... }) => { ... }
 
@@ -728,7 +728,7 @@ rules:
   - python
   severity: WARNING
   message: "An MCP resource handler (@mcp.resource) resolves an object using a URI template variable as the tenant/scope key. Same defect as mcp-resource-uri-variable-used-as-scope, FastMCP spelling: the\
-    \ template variable arrives as a function parameter instead of a destructured object. CWE-639 \xE2\u20AC\u201D see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope\n"
+    \ template variable arrives as a function parameter instead of a destructured object. CWE-639 \u2014 see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s8--resource-uri-as-scope\n"
   patterns:
   - pattern-inside: "@$MCP.resource(...)\ndef $FUNC(...):\n    ...\n"
   - pattern: $STORE.$METHOD(..., $KEY = $VAL, ...)
