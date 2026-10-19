@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `skills/mcp-audit/`: a Claude Code skill that audits the tool surface of an
+  MCP server and writes one evidence-only report. It covers descriptions,
+  result shapes, naming, errors, tests, unused tools and state handling, and on
+  multi-tenant servers it runs this repository's rules and hunt checklist.
+  `SEVERITY.md` gives every finding type a default severity, including four
+  object-level authorization rows, and `references/disclosure.md` maps each
+  severity to a reporting channel for servers you do not maintain.
+
 ### Changed
 
 - The README is shorter: 748 lines down to 315. The scenario walkthroughs, the
