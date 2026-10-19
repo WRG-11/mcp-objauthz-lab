@@ -78,7 +78,7 @@ Requirements: Node.js 20 or later.
 
 ```bash
 npm install
-npm test    # 75 tests: unit, docs-consistency, CI-hardening and PoC-output checks
+npm test    # 77 tests: unit, docs-consistency, CI-hardening and PoC-output checks
 npm run poc # 38-row two-way gate: the tools/resources wired end-to-end over MCP
 npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```
@@ -180,6 +180,16 @@ steps:
       path: src/   # your MCP server source
 ```
 
+## Audit a whole MCP server
+
+The rules look at one bug class. [`skills/mcp-audit/`](skills/mcp-audit/README.md)
+is a [Claude Code skill](https://code.claude.com/docs/en/skills) that reviews the
+rest of a server's tool surface as well: how each tool describes itself, whether
+result shapes and errors agree across tools, which tools have tests, which look
+unused, and how state is written. On a multi-tenant server it runs these rules
+and walks the hunt checklist as one of its steps. It is read-only and writes a
+single report with a severity per finding.
+
 ## Run modes
 
 The lab is a multi-tenant note server exposing eighteen MCP tools and one MCP resource
@@ -204,6 +214,7 @@ What each toggle changes, and how to isolate one scenario, is in
 - [`docs/architecture.md`](docs/architecture.md): the file map and the identity model.
 - [`docs/configuration.md`](docs/configuration.md): the environment variables.
 - [`docs/detection-notes.md`](docs/detection-notes.md): what the rules were measured to catch and miss.
+- [`skills/mcp-audit/`](skills/mcp-audit/README.md): the agent skill that audits a whole MCP server.
 
 ## Scenario reference
 
