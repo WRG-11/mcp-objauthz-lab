@@ -72,6 +72,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ids in a table introduced as complete. The file holds 21, and the table
   lists all 45.
 
+### Security
+
+- `package-lock.json`: `body-parser` 2.3.0 -> 2.4.0 and `fast-uri` 3.1.8 ->
+  3.1.9, the first patched releases for GHSA-27r3-jxmh-p828 (body-parser)
+  and GHSA-333x-w4r6-6crp, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h and
+  GHSA-w74x-v6f9-j3xg (fast-uri). Both are transitive, through `express` and
+  `ajv` under `@modelcontextprotocol/sdk`, and the new versions sit inside
+  the ranges those parents already declare, so `package.json` is unchanged.
+  `qs` moves 6.16.0 -> 6.16.1 because body-parser 2.4.0 requires it.
+
 ## [3.12.3] - 2026-09-22
 
 ### Security
