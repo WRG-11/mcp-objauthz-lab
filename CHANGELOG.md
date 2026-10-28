@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `detection/check-annotations.js` checks every `ruleid:` / `ok:` marker in the
+  detection fixtures: a `ruleid:` line must be covered by a finding of its rule,
+  and an `ok:` line must not be. Known failures are listed one by one in
+  `detection/fixture-annotation-baseline.json`; CI fails on a new failure and on
+  a listed entry that no longer fails. The count assertion could not see a rule
+  that never fires, because its expected total is whatever fires.
 - `skills/mcp-audit/`: a Claude Code skill that audits the tool surface of an
   MCP server and writes one evidence-only report. It covers descriptions,
   result shapes, naming, errors, tests, unused tools and state handling, and on
@@ -39,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `detection/README.md` said every rule fires on its vulnerable fixture and stays
+  silent on the fixed one. Measured with semgrep 1.182.1, 13 of 45 rules fire
+  nowhere in their own fixtures and 5 more fire on fewer lines than marked
+  (70 of 139 `ruleid:` markers uncovered, 7 of 180 `ok:` lines covered). The page
+  now says so and points at the new per-annotation check; the rules themselves
+  are not changed by this entry.
 - `mcp-wildcard-sentinel-scope-bypass` fired on a ternary whose wide branch is
   a string literal, so a UI filter button rendered with
   `scope === 'all' ? 'active' : ''` was reported as a scope bypass. A string

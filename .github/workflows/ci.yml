@@ -159,6 +159,16 @@ jobs:
             }
             console.log("per-rule-id canary: negatives silent, S6/S12 positives visible");
           '
+      - name: every fixture annotation behaves as marked (ratchet)
+        # The count above cannot see a rule that never fires on its own
+        # positive fixture: `want` is set to whatever fires. Measured
+        # 2026-10-28: 13 of 45 rules fired nowhere in their fixtures under a
+        # green count. This step checks each `ruleid:` / `ok:` marker; known
+        # failures are listed in the baseline, and both a new failure and a
+        # listed entry that no longer fails turn the job red.
+        run: |
+          node detection/check-annotations.js /tmp/semgrep-fixtures.json \
+            detection/semgrep/fixtures detection/fixture-annotation-baseline.json
 
   dogfood-action-on-self:
     name: dogfood — the action must FIND the planted vulnerabilities in src/

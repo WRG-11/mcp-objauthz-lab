@@ -187,9 +187,18 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **32/32 rules fire
-on the vulnerable snippet and stay silent on the fixed one.** This is the
-correctness bar every rule was iterated against.
+minimal vulnerable snippet and one fixed snippet per rule. An earlier version
+of this page said every rule fires on its vulnerable snippet and stays silent
+on the fixed one. **Measured 2026-10-28, that was not true:** of 45 rules, 13
+fire nowhere in their own fixtures and 5 fire on fewer lines than marked; of
+139 `ruleid:` markers, 70 are not covered by any finding, and 7 of 180 `ok:`
+lines are. The CI count check stayed green throughout because its expected
+total is the number that fires. [`check-annotations.js`](check-annotations.js)
+now checks every marker in CI against
+[`fixture-annotation-baseline.json`](fixture-annotation-baseline.json), which
+lists today's failures one by one: a new failure fails the build, and so does
+a listed one that has been fixed, so the list only shrinks on purpose. Treat
+a rule that appears in the baseline as unproven.
 
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
