@@ -86,6 +86,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-csharp` matched nothing, for the same
+  reasons. It is now a taint rule from `Headers[...]`, the `out` variable of
+  `Headers.TryGetValue(...)` and `[FromHeader]` parameters to a LINQ comparison
+  with a scope property (either operand order) or a `Find`/`FindAsync` by key.
+  The fixture gained two positives and six neighbors; removing any one guard
+  makes it fail.
 - `mcp-batch-resolve-missing-per-item-scope-filter-py` matched only an
   assignment (`x = [store.get_x(i) for i in ids]`), so a handler that returns
   the comprehension directly, the shape of its own positive fixture, was never

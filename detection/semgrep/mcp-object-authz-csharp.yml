@@ -4,26 +4,50 @@ rules:
   - csharp
   severity: WARNING
   message: An ASP.NET Core MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to an EF Core query, binds it as OrgId in a Where clause). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-      - pattern: $REQ.Headers[$HDR]
-      - pattern: $REQ.Headers.TryGetValue($HDR, out var $HDRVAL)
-      - pattern: Request.Headers[$HDR]
-      - pattern: Request.Headers.TryGetValue($HDR, out var $HDRVAL)
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern-either:
-      - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
-      - pattern: $REPO.Where(x => x.$KEY == $HDRVAL)
-      - pattern: $REPO.FirstOrDefault(x => x.$KEY == $HDRVAL)
-      - pattern: $REPO.SingleOrDefault(x => x.$KEY == $HDRVAL)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(Where|FirstOrDefault|SingleOrDefault|Find|ToList|Select|All).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(OrgId|org_id|TenantId|tenant_id|WorkspaceId|workspace_id|ProjectId|project_id|OrganizationId|organization_id|AccountId|account_id|TeamId|team_id|CustomerId|customer_id)$
+  # Taint mode: the header read and the query are separate statements. The
+  # earlier version put both under one `patterns` (which must match the same
+  # range), compared header names without their quotes, and referenced
+  # $HDRVAL/$KEY that some branches never bound, so it matched nothing. The
+  # finding is reported at the value that selects the scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $R.Headers[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  # TryGetValue hands the header to an `out` variable.
+  - patterns:
+    - pattern-inside: |
+        if ($R.Headers.TryGetValue($HDR, out var $V)) { ... }
+    - pattern: $V
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  # An ASP.NET [FromHeader] parameter is the header value itself.
+  - patterns:
+    - pattern-inside: '$RET $FUNC(..., [FromHeader(Name = $HDR)] $T $P, ...) { ... }'
+    - pattern: $P
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  pattern-sinks:
+  # A LINQ predicate that compares a scope property with the value, in either
+  # order; the comparison is the sink. ClientIp is the IP-scoping variant of
+  # S10.
+  - patterns:
+    - pattern-either:
+      - pattern: $X.$KEY == $V
+      - pattern: $V == $X.$KEY
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: ^(OrgId|TenantId|WorkspaceId|ProjectId|OrganizationId|AccountId|TeamId|CustomerId|ClientIp)$
+  # A finder by key; the call is the sink.
+  - patterns:
+    - pattern: $R.$FIND($V, ...)
+    - metavariable-regex:
+        metavariable: $FIND
+        regex: ^(Find|FindAsync)$
   metadata:
     cwe:
     - CWE-639
