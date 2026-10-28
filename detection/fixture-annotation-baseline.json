@@ -2,11 +2,6 @@
   "_comment": "Known per-annotation failures of the detection fixtures, measured 2026-10-28 with semgrep 1.182.1. A key is <fixture>|<rule>|<marked line text>. detection/check-annotations.js fails CI on any failure not listed here and on any listed entry that no longer fails. Remove an entry in the same commit that fixes it; do not add entries to make a new rule pass.",
   "missed": [
     "client-supplied-scope-overrides-session.go|mcp-client-supplied-scope-overrides-session-go|return nil, SearchOut{Notes: store.SearchNotesByOrg(scope, args.Query)}, nil",
-    "csharp/unscoped-query-object-fetch.cs|mcp-unscoped-query-object-fetch-csharp|return await _context.Credentials.FindAsync(id);",
-    "csharp/unscoped-query-object-fetch.cs|mcp-unscoped-query-object-fetch-csharp|return await _context.FindAsync<Product>(id);",
-    "csharp/unscoped-query-object-fetch.cs|mcp-unscoped-query-object-fetch-csharp|return await _context.Notes.FirstOrDefaultAsync(n => n.Id == id);",
-    "csharp/unscoped-query-object-fetch.cs|mcp-unscoped-query-object-fetch-csharp|return await _context.Notes.SingleOrDefaultAsync(n => n.Id == id);",
-    "csharp/unscoped-query-object-fetch.cs|mcp-unscoped-query-object-fetch-csharp|var entity = await _context.Notes.FindAsync(id);",
     "csharp/wildcard-sentinel-scope-bypass.cs|mcp-wildcard-sentinel-scope-bypass-csharp|if (org_id == \"*\" || org_id == \"all\") {",
     "java/wildcard-sentinel-scope-bypass.java|mcp-wildcard-sentinel-scope-bypass-java|if (org_id.equals(\"*\") || org_id.equals(\"all\")) {",
     "kotlin/unscoped-query-object-fetch.kt|mcp-unscoped-query-object-fetch-kotlin|return TABLE.selectAll().where { TABLE.id eq id }.firstOrNull()",

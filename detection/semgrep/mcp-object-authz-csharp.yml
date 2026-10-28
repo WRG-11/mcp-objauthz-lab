@@ -100,20 +100,45 @@ rules:
   - csharp
   severity: WARNING
   message: An object is fetched by id through a query that carries no tenant key (WorkspaceId / ProjectId / OrganizationId / OrgId / TenantId / AccountId / UserId / OwnerId). If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+  # The earlier version applied `metavariable-regex: $REPO` to the whole rule.
+  # The DbContext branches never bind $REPO, and `_context.Notes` does not end
+  # in Repository/DbSet/DbContext, so the rule matched nothing. Each branch
+  # now carries its own filter. A lambda that also compares a tenant key
+  # (`n.Id == id && n.OrgId == org`) is not `$X.Id == $ID` and stays silent.
+  #
+  # The id must come from the caller: a parameter of a public method, or
+  # an expression built from one (`dto.Id`, `new Guid(dto.Key)`). Measured on
+  # real clones, most id-only fetches take a server-side id (a claim, the
+  # user's profile, a row just created, a foreign key of a loaded row); those
+  # are not S7. A private helper that receives a loaded entity is skipped too.
   patterns:
+  - pattern-inside: |
+      public $RET $M(..., $PT $P, ...) { ... }
   - pattern-either:
-      - pattern: (await $CTX.$SET.FindAsync($ID))
-      - pattern: (await $CTX.FindAsync<$T>($ID))
-      - pattern: (await $CTX.$SET.FirstOrDefaultAsync($X => $X.Id == $ID))
-      - pattern: (await $CTX.$SET.SingleOrDefaultAsync($X => $X.Id == $ID))
-      - pattern: $REPO.Find($ID)
-      - pattern: $REPO.FindAsync($ID)
-      - pattern: $REPO.FirstOrDefault(x => x.Id == $ID)
-      - pattern: $REPO.SingleOrDefault(x => x.Id == $ID)
-  - pattern-not: (await $CTX.$SET.FirstOrDefaultAsync($X => ... && $X.$TENANT == $T))
-  - metavariable-regex:
-      metavariable: $REPO
-      regex: .*Repository|.*DbSet|.*DbContext
+    - patterns:
+      - pattern: $CTX.$SET.$FIND($ID)
+      - metavariable-regex:
+          metavariable: $FIND
+          regex: ^Find(Async)?$
+    - pattern: $CTX.FindAsync<$T>($ID)
+    - patterns:
+      - pattern: $CTX.$SET.$FIRST($X => $X.Id == $ID)
+      - metavariable-regex:
+          metavariable: $FIRST
+          regex: ^(First|Single)(OrDefault)?(Async)?$
+    - patterns:
+      - pattern: $REPO.$FIND($ID)
+      - metavariable-regex:
+          metavariable: $FIND
+          regex: ^Find(Async)?$
+      - metavariable-regex:
+          metavariable: $REPO
+          regex: (?i)^_?\w*repo(sitory)?$
+  - metavariable-pattern:
+      metavariable: $ID
+      pattern-either:
+      - pattern: $P
+      - pattern: $P.$F
   metadata:
     cwe:
     - CWE-639

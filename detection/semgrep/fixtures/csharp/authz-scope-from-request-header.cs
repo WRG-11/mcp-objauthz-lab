@@ -110,6 +110,8 @@ public async Task<IEnumerable<Project>> ProjectListVuln([FromHeader(Name = "X-Te
 
 // FIRE: finder keyed by the header value.
 public async Task<Account> AccountShowVuln(HttpRequest request) {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
     // ruleid: mcp-authz-scope-from-request-header-csharp
     return await _repo.Accounts.FindAsync(request.Headers["x-account-id"].FirstOrDefault());
 }
@@ -117,6 +119,8 @@ public async Task<Account> AccountShowVuln(HttpRequest request) {
 // OK (legitimate neighbor): a correlation header as a finder key is not a
 // scope header. Pins the header-name regex of the indexer source.
 public async Task<AuditEvent> AuditShow(HttpRequest request) {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
     // ok: mcp-authz-scope-from-request-header-csharp
     return await _repo.AuditEvents.FindAsync(request.Headers["x-request-id"].FirstOrDefault());
 }
@@ -124,6 +128,9 @@ public async Task<AuditEvent> AuditShow(HttpRequest request) {
 // OK: the same through TryGetValue. Pins its header-name regex.
 public async Task<AuditEvent> AuditShowTry(HttpRequest request) {
     if (request.Headers.TryGetValue("X-Request-Id", out var reqId)) {
+        // The finder has no tenant key either, but the S7 rule only follows ids
+        // that come from a parameter, not the `out` variable of TryGetValue.
+        // todoruleid: mcp-unscoped-query-object-fetch-csharp
         // ok: mcp-authz-scope-from-request-header-csharp
         return await _repo.AuditEvents.FindAsync(reqId.FirstOrDefault());
     }
@@ -132,6 +139,8 @@ public async Task<AuditEvent> AuditShowTry(HttpRequest request) {
 
 // OK: the same through [FromHeader]. Pins its header-name regex.
 public async Task<AuditEvent> AuditShowFromHeader([FromHeader(Name = "X-Request-Id")] string reqId) {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
     // ok: mcp-authz-scope-from-request-header-csharp
     return await _repo.AuditEvents.FindAsync(reqId);
 }

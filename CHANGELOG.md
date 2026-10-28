@@ -86,6 +86,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-unscoped-query-object-fetch-csharp` matched nothing: a
+  `metavariable-regex` on `$REPO` applied to the whole rule, and the DbContext
+  branches never bind `$REPO`. Each branch now carries its own filter
+  (`Find`/`FindAsync` on a set, `FindAsync<T>` on a context,
+  `First`/`Single`(`OrDefault`)(`Async`) with an id-only lambda, and
+  `Find`/`FindAsync` on a repository). The id must now come from the caller:
+  a parameter of a public method, or an expression built from one. On real
+  clones most id-only fetches take a server-side id (a claim, the user's
+  profile, a row just created, a foreign key of a loaded row), which is not
+  S7. The rule also fires on three id-only finders in the C# header fixture,
+  now marked for it; the fourth reads the `out` variable of `TryGetValue`, which
+  the rule does not follow, and is marked `todoruleid`. The fixture gained
+  three positives and six neighbors; removing any one guard makes it fail.
 - `mcp-authz-scope-from-request-header-swift` matched nothing, for the same
   reasons. It is now a taint rule from `req.headers[...]` and
   `req.headers.first(name:)` to a Fluent `filter` on a scope key path or a

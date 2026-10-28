@@ -46,7 +46,62 @@ public async Task<Note> GetNoteSingleVuln(string id) {
 public async Task DeleteRecordVuln(string id) {
     // ruleid: mcp-unscoped-query-object-fetch-csharp
     var entity = await _context.Notes.FindAsync(id);
+    // ok: mcp-unscoped-query-object-fetch-csharp
     if (entity != null) _context.Notes.Remove(entity);
+}
+
+// FIRE: synchronous Find by id only.
+public Note GetNoteSyncVuln(string id) {
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
+    return _context.Notes.Find(id);
+}
+
+// FIRE: a repository wrapper fetched by id only.
+public async Task<Note> GetNoteFromRepositoryVuln(string id) {
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
+    return await _noteRepository.FindAsync(id);
+}
+
+// FIRE: the id is a field of the request body.
+public async Task<bool> AckNoteVuln([FromBody] NoteRef m) {
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
+    var note = await _context.Notes.FindAsync(m.Id);
+    return note != null;
+}
+
+// OK: the id comes from the caller's claims, not from the request. Pins the
+// rule that the id must come from a parameter.
+public async Task<Note> GetPinnedNoteFromClaims(CancellationToken ct) {
+    var pinned = User.FindFirst("pinned_note")?.Value;
+    // ok: mcp-unscoped-query-object-fetch-csharp
+    return await _context.Notes.FindAsync(pinned);
+}
+
+// OK: a private helper that receives a loaded row. Pins the `public`
+// restriction.
+private async Task<Note> LoadParentNote(Note child) {
+    // ok: mcp-unscoped-query-object-fetch-csharp
+    return await _context.Notes.FindAsync(child.ParentId);
+}
+
+// OK: a repository write is not a fetch. Pins the method regex of the
+// repository branch.
+public async Task SaveNote(Note note) {
+    // ok: mcp-unscoped-query-object-fetch-csharp
+    await _noteRepository.Add(note);
+}
+
+// OK: a count returns no row. Pins the First/Single method regex.
+public async Task<int> CountNotesById(string id) {
+    // ok: mcp-unscoped-query-object-fetch-csharp
+    return await _context.Notes.CountAsync(n => n.Id == id);
+}
+
+// OK: a lookup that is not a repository or a DbSet. Pins the repository
+// receiver regex.
+public async Task<Note> GetFromLookup(string id) {
+    // ok: mcp-unscoped-query-object-fetch-csharp
+    return await _lookup.FindAsync(id);
 }
 
 // OK: Find by id with tenant key in predicate (SILENT - owner/tenant scoped)
@@ -79,6 +134,7 @@ public async Task<Note> GetNoteWhereSafe(string id, string orgId) {
         .FirstOrDefaultAsync(x => x.Id == id);
 }
 
+class NoteRef { public string Id { get; set; } = ""; }
 class Credential { public string Id { get; set; } = ""; public string WorkspaceId { get; set; } = ""; }
 class Product { public string Id { get; set; } = ""; public string TenantId { get; set; } = ""; }
 class Note { public string Id { get; set; } = ""; public string OrgId { get; set; } = ""; public string ProjectId { get; set; } = ""; public string TenantId { get; set; } = ""; }
