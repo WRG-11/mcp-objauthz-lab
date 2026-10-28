@@ -78,6 +78,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Authorization` read that is not a scope header; it now sits on the query
   that uses `x-org-id`. The fixture gained three positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-ruby` matched nothing, for the same
+  reasons. It is now a taint rule from `headers[...]`, `headers.fetch(...)` and
+  Rack `env["HTTP_X_..."]` to a scope-named key in a `where`/`find_by` hash or a
+  `find` by primary key. One fixture case marked as a positive read a bearer
+  token from `Authorization` and passed it to an authentication check; that is
+  not a client-chosen scope and is outside the rule's own header list, so it is
+  now an `ok:` neighbor. The fixture gained two positives and five neighbors;
+  removing any one guard makes it fail.
 - `mcp-batch-resolve-missing-per-item-scope-filter-py` matched only an
   assignment (`x = [store.get_x(i) for i in ids]`), so a handler that returns
   the comprehension directly, the shape of its own positive fixture, was never
