@@ -86,6 +86,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-unscoped-query-object-fetch-php` only fired on Contao `findByPk` and
+  `findBy`: a `$MODEL` filter (`.*Model|.*Eloquent`) on the whole rule left
+  out the repository branch, which never binds `$MODEL`, and every Eloquent
+  model, which is not named `*Model`. It is now a taint rule: the id must
+  come from a parameter of the enclosing function or method, or from
+  `$_GET`/`$_POST`/`$_REQUEST`, and reach a by-id finder (`find`,
+  `findOrFail`, `findByPk`, `destroy`, `where('id', ...)->first()`, Contao
+  `findBy(['id=?'], [...])`, or `find` on a receiver named like a
+  repository). An id read from `$request->user()` and a keyed criteria array
+  (`Event::find(['timestamp' => ...])`) stay silent. A tenant-key exclusion
+  that no single-key sink could reach was removed. The fixture annotation for
+  the Contao case sat one line above its finding and was moved; the
+  ProcessWire `findPages($input)` case passes a selector, not an id, and is
+  now `todoruleid`. Measured on 24 public PHP repositories, the rule fires 6
+  times; 5 are a repository fetch by id in MCP ability handlers, and 1 is a
+  criteria array that gains a key through `$args['k'] = $v` after it is
+  built, which the sanitizer does not follow.
 - `mcp-unscoped-query-object-fetch-ruby` only matched an id taken from
   `params[...]`, while every case in its fixture took the id as a method
   parameter, so it matched nothing there. It now also matches an id that is a

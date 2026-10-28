@@ -128,6 +128,8 @@ function projectListServerVuln(): array {
 
 // FIRE: a static finder keyed by the header value.
 function accountShowVuln(Request $request): Account {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-php
     // ruleid: mcp-authz-scope-from-request-header-php
     return Account::findOrFail($request->header('x-account-id'));
 }
@@ -135,6 +137,8 @@ function accountShowVuln(Request $request): Account {
 // OK (legitimate neighbor): a correlation header used as a finder key is not a
 // scope header. Pins the header-name regex.
 function auditShow(Request $request): AuditEvent {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-php
     // ok: mcp-authz-scope-from-request-header-php
     return AuditEvent::findOrFail($request->header('x-request-id'));
 }
