@@ -86,6 +86,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-missing-object-authz-check` counted only guard calls as a check, so a
+  handler that compares the object's scope key with the session's inline
+  (`if (!note || note.orgId !== session.orgId) unavailable();`) was reported.
+  That is this lab's own `note_get`, the correctly authorized handler, and
+  the published scenario count listed it as S1 being flagged. An `if` whose
+  condition compares the same key on the object and on the session now counts
+  as the check, in either operand order and with `!==` or `!=`; the `!=` forms
+  also match Python. A comparison of two different keys still fires. The
+  body of the `if` is not checked. 9 mutants, all killed.
+- The scenario count against `src/tools.js` was re-measured: a rule reports a
+  line in the handlers of 8 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10,
+  S13), not 7 (S1, S2, S6, S7, S8, S12, S13). S1 was a false positive on
+  `note_get`; S3 and S12 have their scope filter in the fixed branch of the
+  toggle and were flagged only through the batch rule's `.filter(Boolean)`
+  defect; S4 and S10 are found since their rules were fixed. The README,
+  `detection/README.md` and `docs/detection-notes.md` say so and state how a
+  scenario is counted.
 - The fixture annotation baseline is empty: every `ruleid:` and `ok:` marker
   in the detection fixtures now holds. The last four entries were three rule
   defects and one misplaced marker:

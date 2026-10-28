@@ -204,9 +204,21 @@ baseline is empty: every marker holds.
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **7 of 13 scenarios flagged (S1, S2, S6, S7, S8, S12,
-S13). S3-S5 and S9-S11 are missed** — the toggle-gated handlers plus S10/S11's
-transport-header shape, which the JS rules match only in the language packs.
+ruleset against it, measured 2026-10-28 with semgrep 1.182.1 (a scenario
+counts when a rule reports a line inside the handler its toggle gates): **8
+of 13 scenarios flagged (S2, S4, S6, S7, S8, S9, S10, S13). S1, S3, S5, S11
+and S12 are missed.** S1 and S5 have their guard call behind the toggle; S3
+and S12 have their per-item scope filter in the fixed branch of a toggle
+ternary, and the batch rule is silent when such a filter exists; S11 reads
+the header into a variable, falls back to a test header, and picks the quota
+key in the toggle ternary, a longer flow than the rule's "header read with a
+fallback, passed to the counter". Two earlier counts were wrong in opposite
+directions: S1 was counted from a finding on `note_get`, a correctly
+authorized handler (an inline `note.orgId !== session.orgId` check the S1
+rule did not recognize), and S3/S12 were flagged only because the batch rule
+did not recognize a read chained with `.filter(Boolean)`. Both rules are
+fixed. S4 and S10 are new: their rules did not fire on an `if` (S4) or on
+the JavaScript header read (S10) before.
 
 S9 has no dedicated rule. Measured before deciding that: `mcp-missing-
 object-authz-check` (S1's rule) already fires on `note_share_redeem`'s vuln
@@ -253,9 +265,11 @@ pins all of this as fixtures: for S1 and S5 each, a toggle-free vulnerable
 handler (fires), the lab's toggle-guarded spelling (silent, on purpose), and
 an unconditionally-guarded handler (silent).
 
-S2/S3/S4/S6 don't have this problem because their bug is about an
-*unconditional* fallback/sentinel/missing-filter shape, not a conditionally-
-present check call — those rules match the runtime toggle correctly.
+S2/S4/S6 don't have this problem because their bug is about an
+*unconditional* fallback/sentinel shape, not a conditionally-present check —
+those rules match the runtime toggle correctly. S3 and S12 do: their check
+is a filter, and the lab writes it in the fixed branch, so the batch rule
+reads it as present, the same decision as for S1 and S5.
 
 ## A real-world referent — and what it caught the rules missing
 
