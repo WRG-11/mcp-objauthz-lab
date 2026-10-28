@@ -39,13 +39,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `mcp-ratelimit-scope-from-forwarded-header-py` had no positive fixture and
+  missed the most common quota shape: once the header value was stored in a
+  variable, a counter call inside an `if` condition
+  (`if store.get_quota_count(key) >= 10:`) did not match, while the same
+  call as an assignment, a bare statement or a `return` did. The counter
+  call is now matched anywhere inside the statement. New fixture
+  `xff-for-ratelimit.py` ports the JavaScript real-capture fixture and fires
+  three times; its session-keyed case stays silent. Fixture total 78 -> 81.
 - `mcp-admin-named-tool-missing-role-check-py` fired on any decorator, so a
   typer/click CLI command named `admin` was reported as an unguarded MCP tool.
   The rule now requires a tool registration decorator (`@<x>.tool` or
   `@<x>.tool(...)`), which is what its message describes. The new negative
   fixture `admin-named-cli-command-not-a-tool.py` comes from a real false
   positive (a loopback-only admin panel command in an MCP server repository)
-  and is on the CI silence list. The fixture total stays at 78; the existing
+  and is on the CI silence list. It does not change the fixture total; the existing
   positive case still fires.
 - Twelve references in the rule files pointed at three README anchors that no
   longer existed (`#scenario-s6--foreign-parent`,

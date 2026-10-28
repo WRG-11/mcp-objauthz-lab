@@ -39,5 +39,5 @@ Two rules were hardened in this release against false positives found in a
   comparison. Two-way canary: FIRE on authz bypass, SILENT on markup/UI filter.
 
 Real-capture fixtures from the audit validate both hardenings: `xff-for-logging.js/.py`
-(SILENT), `wildcard-in-markup.js` (SILENT), and `xff-for-ratelimit.js` (FIRE for
-the new S11 rule).
+(SILENT), `wildcard-in-markup.js` (SILENT), and `xff-for-ratelimit.js/.py` (FIRE for
+the new S11 rule and its -py sibling).
