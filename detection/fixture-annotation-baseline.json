@@ -1,11 +1,5 @@
 {
   "_comment": "Known per-annotation failures of the detection fixtures, measured 2026-10-28 with semgrep 1.182.1. A key is <fixture>|<rule>|<marked line text>. detection/check-annotations.js fails CI on any failure not listed here and on any listed entry that no longer fails. Remove an entry in the same commit that fixes it; do not add entries to make a new rule pass.",
-  "missed": [
-    "client-supplied-scope-overrides-session.go|mcp-client-supplied-scope-overrides-session-go|return nil, SearchOut{Notes: store.SearchNotesByOrg(scope, args.Query)}, nil",
-    "xff-for-ratelimit.js|mcp-ratelimit-scope-from-forwarded-header|const quotaKey = extra.requestInfo.headers[\"x-forwarded-for\"] ?? session.userId;"
-  ],
-  "okFired": [
-    "batch-resolve-missing-per-item-scope-filter.js|mcp-batch-resolve-missing-per-item-scope-filter|const resolved = ids.map(id => store.getNote(id)).filter(Boolean);",
-    "batch-resolve-missing-per-item-scope-filter.js|mcp-batch-resolve-missing-per-item-scope-filter|const resolved = ids.map(id => store.getNote(id)).filter(Boolean);"
-  ]
+  "missed": [],
+  "okFired": []
 }

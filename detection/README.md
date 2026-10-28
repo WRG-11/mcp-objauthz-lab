@@ -198,7 +198,8 @@ now checks every marker in CI against
 [`fixture-annotation-baseline.json`](fixture-annotation-baseline.json), which
 lists today's failures one by one: a new failure fails the build, and so does
 a listed one that has been fixed, so the list only shrinks on purpose. Treat
-a rule that appears in the baseline as unproven.
+a rule that appears in the baseline as unproven. As of 2026-10-28 the
+baseline is empty: every marker holds.
 
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===

@@ -19,3 +19,10 @@ function batchOverPreparationsMap(resolvedAgents, runtimeAgentPreparations) {
   // ok: mcp-batch-resolve-missing-per-item-scope-filter
   return resolvedAgents.map((agent) => runtimeAgentPreparations.get(agent));
 }
+
+// A suffixed accessor on a receiver named as a cache or map is still a local
+// lookup. Pins the receiver-name filter.
+function batchOverNoteCache(noteIds, noteCache) {
+  // ok: mcp-batch-resolve-missing-per-item-scope-filter
+  return noteIds.map((id) => noteCache.getNote(id));
+}

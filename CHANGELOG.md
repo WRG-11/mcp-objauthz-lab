@@ -86,6 +86,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- The fixture annotation baseline is empty: every `ruleid:` and `ok:` marker
+  in the detection fixtures now holds. The last four entries were three rule
+  defects and one misplaced marker:
+  - `mcp-ratelimit-scope-from-forwarded-header` listed 40 patterns, all
+    written with optional chaining. A pattern with `?.` does not match code
+    without it, so `extra.requestInfo.headers["x-forwarded-for"]` was never
+    found. The header read is now checked once, through a metavariable, and
+    the statement shapes are listed once. The fixture gained one case per
+    statement shape and header spelling and a neighbor for each name filter
+    (10 mutants, all killed); before, 4 of its 11 cases fired.
+  - `mcp-batch-resolve-missing-per-item-scope-filter` was silenced only when
+    the batch read was exactly `x = ids.map(...)`, so `ids.map(...)
+    .filter(Boolean)` fired even with a scope filter after it, and any later
+    `.filter(...)`, such as one that only drops missing ids, silenced it. It
+    is now silenced by a filter that compares the same key on the item and
+    the caller's side (`n.orgId === session.orgId`), later or chained. A
+    filter comparing two different keys still fires. The receiver-name
+    filter (`noteCache.getNote`) gained the neighbor it lacked (8 mutants,
+    all killed).
+  - `mcp-client-supplied-scope-overrides-session-go` reports the fallback
+    block, but its marker sat on the `return` below it. The marker moved to
+    the block, and a string fallback on a non-scope field (`args.Query`) now
+    pins the field-name filter, which the integer `limit` neighbor never
+    could.
 - The seven `mcp-wildcard-sentinel-scope-bypass` rules (JavaScript/TypeScript/
   Python, Java, C#, Kotlin, PHP, Ruby, Swift) never fired on the `if` form,
   which is the form most of their fixture cases use. Each rule matched the
