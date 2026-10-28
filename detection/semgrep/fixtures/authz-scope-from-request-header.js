@@ -121,6 +121,7 @@ async function quotaByForwardedIp({ token }, extra) {
   const session = resolveSession(store, token);
   const fwd = extra?.requestInfo?.headers?.["x-forwarded-for"];
   // ok: mcp-authz-scope-from-request-header
+  // ruleid: mcp-ratelimit-scope-from-forwarded-header
   if (store.getQuotaCount(fwd) >= 10) throw new Error("Quota exceeded");
   return store.listNotesByOrg(session.orgId);
 }

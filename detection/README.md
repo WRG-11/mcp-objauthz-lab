@@ -205,20 +205,19 @@ baseline is empty: every marker holds.
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
 ruleset against it, measured 2026-10-28 with semgrep 1.182.1 (a scenario
-counts when a rule reports a line inside the handler its toggle gates): **8
-of 13 scenarios flagged (S2, S4, S6, S7, S8, S9, S10, S13). S1, S3, S5, S11
+counts when a rule reports a line inside the handler its toggle gates): **9
+of 13 scenarios flagged (S2, S4, S6, S7, S8, S9, S10, S11, S13). S1, S3, S5
 and S12 are missed.** S1 and S5 have their guard call behind the toggle; S3
 and S12 have their per-item scope filter in the fixed branch of a toggle
-ternary, and the batch rule is silent when such a filter exists; S11 reads
-the header into a variable, falls back to a test header, and picks the quota
-key in the toggle ternary, a longer flow than the rule's "header read with a
-fallback, passed to the counter". Two earlier counts were wrong in opposite
+ternary, and the batch rule is silent when such a filter exists. Two earlier
+counts were wrong in opposite
 directions: S1 was counted from a finding on `note_get`, a correctly
 authorized handler (an inline `note.orgId !== session.orgId` check the S1
 rule did not recognize), and S3/S12 were flagged only because the batch rule
 did not recognize a read chained with `.filter(Boolean)`. Both rules are
-fixed. S4 and S10 are new: their rules did not fire on an `if` (S4) or on
-the JavaScript header read (S10) before.
+fixed. S4, S10 and S11 are new: their rules did not fire on an `if` (S4),
+on the JavaScript header read (S10), or on a header that passes through
+variables and a ternary before it keys the counter (S11) before.
 
 S9 has no dedicated rule. Measured before deciding that: `mcp-missing-
 object-authz-check` (S1's rule) already fires on `note_share_redeem`'s vuln

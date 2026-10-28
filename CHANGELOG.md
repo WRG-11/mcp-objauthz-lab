@@ -96,11 +96,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also match Python. A comparison of two different keys still fires. The
   body of the `if` is not checked. 9 mutants, all killed.
 - The scenario count against `src/tools.js` was re-measured: a rule reports a
-  line in the handlers of 8 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10,
-  S13), not 7 (S1, S2, S6, S7, S8, S12, S13). S1 was a false positive on
+  line in the handlers of 9 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10,
+  S11, S13), not 7 (S1, S2, S6, S7, S8, S12, S13). S1 was a false positive on
   `note_get`; S3 and S12 have their scope filter in the fixed branch of the
   toggle and were flagged only through the batch rule's `.filter(Boolean)`
-  defect; S4 and S10 are found since their rules were fixed. The README,
+  defect; S4, S10 and S11 are found since their rules were fixed. The README,
   `detection/README.md` and `docs/detection-notes.md` say so and state how a
   scenario is counted.
 - The fixture annotation baseline is empty: every `ruleid:` and `ok:` marker
@@ -109,10 +109,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `mcp-ratelimit-scope-from-forwarded-header` listed 40 patterns, all
     written with optional chaining. A pattern with `?.` does not match code
     without it, so `extra.requestInfo.headers["x-forwarded-for"]` was never
-    found. The header read is now checked once, through a metavariable, and
-    the statement shapes are listed once. The fixture gained one case per
-    statement shape and header spelling and a neighbor for each name filter
-    (10 mutants, all killed); before, 4 of its 11 cases fired.
+    found, and each pattern needed the header read stored with a fallback and
+    then passed on, so the lab's own S11 handler (two variables and a toggle
+    ternary between the read and the counter) was missed too. It is now a
+    taint rule: a client-identity header read is the source, a quota or
+    rate-limit call the sink, and it reports the call. The fixture gained one
+    case per header spelling and flow, a copy of the S11 flow, and a neighbor
+    for each name filter (5 mutants, all killed); before, 4 of its 12 cases
+    fired. The quota lookup in the header-scope fixture, which that fixture
+    already said belongs to this rule, is now marked for it.
   - `mcp-batch-resolve-missing-per-item-scope-filter` was silenced only when
     the batch read was exactly `x = ids.map(...)`, so `ids.map(...)
     .filter(Boolean)` fired even with a scope filter after it, and any later

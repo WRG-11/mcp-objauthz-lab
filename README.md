@@ -160,9 +160,9 @@ and Swift language packs. Eleven of them run against Python as well as
 JavaScript/TypeScript, which matters because the reference MCP SDKs ship in both.
 
 Measured against this lab's own source on 2026-10-28, the rules report a line in the
-handlers of 8 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10, S13). The other five
-have their fix written in the same handler behind a runtime toggle, which the rules
-deliberately read as present, or, for S11, a longer header flow than the rule follows.
+handlers of 9 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10, S11, S13). The other
+four have their fix written in the same handler behind a runtime toggle, which the
+rules deliberately read as present.
 An earlier count listed S1 as flagged; that finding was on `note_get`, a correctly
 authorized handler, and is fixed. Against the official `@modelcontextprotocol/sdk` the ruleset
 produces zero findings, measured with a planted canary that proves the scan reached
@@ -309,7 +309,7 @@ The most useful contribution to a detection ruleset is a false positive:
 a rule that fires on correctly authorized code. A gate wider than the defect
 it targets gets switched off, and a switched-off rule protects nothing, so
 those are treated as real defects here. Misses are just as welcome; the rules
-flag 8 of the 13 scenarios against this lab's own source and
+flag 9 of the 13 scenarios against this lab's own source and
 [`detection/README.md`](detection/README.md) says why.
 
 There is an issue template for each. [`CONTRIBUTING.md`](CONTRIBUTING.md) has

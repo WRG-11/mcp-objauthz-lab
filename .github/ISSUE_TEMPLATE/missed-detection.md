@@ -6,7 +6,7 @@ labels: ["missed-detection", "detection"]
 ---
 
 <!--
-The rules currently flag 8 of the 13 scenarios against this lab's own source.
+The rules currently flag 9 of the 13 scenarios against this lab's own source.
 detection/README.md explains why. A miss is a starting point, not something to
 argue with.
 -->

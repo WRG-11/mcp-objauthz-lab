@@ -27,7 +27,7 @@ noise. When reporting one, the minimal reproducing snippet matters more than
 the explanation.
 
 A miss (a real authorization bug the rules walked past) is just as welcome.
-The rules currently flag 8 of the 13 scenarios against this lab's own source;
+The rules currently flag 9 of the 13 scenarios against this lab's own source;
 `detection/README.md` explains why, honestly, and that limitation is a
 starting point rather than a defence.
 

@@ -11,11 +11,10 @@ no toggle, guard simply absent — both fire exactly as designed; the only code
 they go quiet on is a handler where the guard is *written but gated behind a
 runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
 the measured decision and the fixtures pinning it). Measured again on
-2026-10-28, a rule reports a line inside the handlers of **8 of the 13
-scenarios (S2, S4, S6, S7, S8, S9, S10, S13)**. The remaining five stay
+2026-10-28, a rule reports a line inside the handlers of **9 of the 13
+scenarios (S2, S4, S6, S7, S8, S9, S10, S11, S13)**. The remaining four stay
 quiet: S1, S3, S5 and S12 have their fix in the same handler behind a runtime
-toggle (this lab's own scaffolding), and S11 routes the header through a
-longer flow than its rule follows — see
+toggle (this lab's own scaffolding) — see
 [`detection/README.md`](../detection/README.md) for the per-scenario breakdown,
 the two earlier miscounts it corrects, and the fixtures pinning it. S9 has no
 dedicated rule: the existing `mcp-missing-object-authz-check` (S1's rule)
