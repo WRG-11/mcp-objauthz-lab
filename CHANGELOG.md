@@ -86,6 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-unscoped-query-object-fetch-kotlin` matched nothing, for the same
+  reason as the C# rule: a `$REPO` filter on the whole rule, which was also
+  case-sensitive (`.*Dao` did not match `dao`). The repository branch now
+  matches `findById`/`findByIdOrNull`/`getById`/`deleteById` with one argument
+  on a receiver named like a repository or DAO, which keeps in-memory registries
+  out; the Exposed branch keeps its id-only `where` block. The fixture gained a
+  positive and two neighbors; removing any one guard makes it fail.
 - `mcp-unscoped-query-object-fetch-csharp` matched nothing: a
   `metavariable-regex` on `$REPO` applied to the whole rule, and the DbContext
   branches never bind `$REPO`. Each branch now carries its own filter

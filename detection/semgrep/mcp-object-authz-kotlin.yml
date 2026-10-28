@@ -88,17 +88,25 @@ rules:
   - kotlin
   severity: WARNING
   message: An object is fetched by id through a query filter that carries no tenant key (workspaceId / projectId / organizationId / orgId / tenantId / accountId / userId / ownerId). If the entity is multi-tenant, the query matches on id alone and any caller's id resolves regardless of tenant -- the query-scoped form of object-level authorization failure (BOLA / IDOR, CWE-639). Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
-  patterns:
-  - pattern-either:
-      - pattern: $REPO.findByIdOrNull($ID)
-      - pattern: $REPO.findById($ID)
-      - pattern: $DAO.findById($ID)
-      - pattern: $TABLE.selectAll().where { $TABLE.id eq $ID }
-      - pattern: $TABLE.selectAll().where { $TABLE.id eq $ID }.firstOrNull()
-  - pattern-not: $TABLE.selectAll().where { $TABLE.id eq $ID and ... }
-  - metavariable-regex:
-      metavariable: $REPO
-      regex: .*Repository|.*Dao
+  # The earlier version applied `metavariable-regex: $REPO` to the whole rule.
+  # The DAO and Exposed branches never bind $REPO, and the regex was
+  # case-sensitive (`.*Dao` does not match `dao`), so the rule matched nothing.
+  # Each branch now carries its own filter.
+  pattern-either:
+  # A repository or DAO fetched (or deleted) by id alone. The receiver filter
+  # keeps in-memory registries (`tools.findById(name)`) out.
+  - patterns:
+    - pattern: $REPO.$FIND($ID)
+    - metavariable-regex:
+        metavariable: $FIND
+        regex: ^(findById|findByIdOrNull|getById|deleteById)$
+    - metavariable-regex:
+        metavariable: $REPO
+        regex: (?i)^\w*(repo|repository|dao)$
+  # Exposed DSL: a where-block whose only predicate is the id column.
+  - patterns:
+    - pattern: '$TABLE.selectAll().where { $TABLE.id eq $ID }'
+    - pattern-not: '$TABLE.selectAll().where { $TABLE.id eq $ID and ... }'
   metadata:
     cwe:
     - CWE-639
