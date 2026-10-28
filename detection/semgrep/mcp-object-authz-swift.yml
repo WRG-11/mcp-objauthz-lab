@@ -4,17 +4,31 @@ rules:
   - swift
   severity: WARNING
   message: A Vapor/SwiftNIO MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to a Fluent query, binds it as orgId in a filter). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-    - pattern: $REQ.headers[$HDR]
-    - pattern: $REQ.headers[$HDR].first
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(filter|query|find|all|first|get).*
+  # Taint mode: the header read and the query are separate statements. The
+  # earlier version put both under one `patterns` (which must match the same
+  # range), compared header names without their quotes, and referenced
+  # $HDRVAL that no pattern bound, so it matched nothing.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $R.headers[$HDR]
+      - pattern: '$R.headers.first(name: $HDR)'
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  pattern-sinks:
+  # A Fluent filter that compares a scope key path with the value. The finding
+  # sits on the value, so a chained query reports the filter line, not the
+  # line where the chain starts. clientIp is the IP-scoping variant of S10.
+  - patterns:
+    - pattern: $Q.filter($KP == $V)
+    - metavariable-regex:
+        metavariable: $KP
+        regex: ^\\\.\$(orgId|tenantId|workspaceId|projectId|organizationId|accountId|teamId|customerId|clientIp)$
+    - focus-metavariable: $V
+  # A Fluent finder by key; the call is the sink.
+  - pattern: '$M.find($V, on: $DB)'
   metadata:
     cwe:
     - CWE-639

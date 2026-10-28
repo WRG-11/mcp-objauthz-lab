@@ -9,6 +9,9 @@
 // TWO-WAY CANARY:
 // - FIRE: header value feeds an authz decision (scope/org-id selection, Note.query(\.orgId == headerValue))
 // - SILENT: header read ONLY for logging (no authz decision)
+//
+// The rule is a taint rule, so a finding sits on the SINK: the value in the
+// scope filter, or the finder call. `ruleid:` markers are above that line.
 
 import Vapor
 import Fluent
@@ -16,26 +19,26 @@ import Fluent
 // FIRE: header value used to select org scope in a Fluent query (authz decision)
 func noteGetScopedVuln(req: Request, token: String) async throws -> [Note] {
     let session = try resolveSession(req: req, token: token)
-    // ruleid: mcp-authz-scope-from-request-header-swift
     let headerOrg = req.headers["x-org-id"].first ?? session.orgId
+    // ruleid: mcp-authz-scope-from-request-header-swift
     return try await Note.query(on: req.db).filter(\.$orgId == headerOrg).all()
 }
 
 // FIRE (IP-scoping variant): X-Forwarded-For used to select client IP scope
 func noteGetScopedByIpVuln(req: Request, token: String) async throws -> [Note] {
     let session = try resolveSession(req: req, token: token)
-    // ruleid: mcp-authz-scope-from-request-header-swift
     let fwd = req.headers["x-forwarded-for"].first ?? session.clientIp
+    // ruleid: mcp-authz-scope-from-request-header-swift
     return try await Note.query(on: req.db).filter(\.$clientIp == fwd).all()
 }
 
 // FIRE: header used directly as orgId in a query filter (authz decision)
 func noteGetByQueryVuln(req: Request, token: String, id: String) async throws -> Note? {
     let session = try resolveSession(req: req, token: token)
-    // ruleid: mcp-authz-scope-from-request-header-swift
     let headerOrg = req.headers["x-org-id"].first ?? session.orgId
     return try await Note.query(on: req.db)
         .filter(\.$id == id)
+        // ruleid: mcp-authz-scope-from-request-header-swift
         .filter(\.$orgId == headerOrg)
         .first()
 }
@@ -68,6 +71,44 @@ func readHeaderButDontUse(req: Request, token: String) async throws -> [Note] {
     // ok: mcp-authz-scope-from-request-header-swift
     let _unused = req.headers["x-org-id"].first
     return try await Note.query(on: req.db).filter(\.$orgId == session.orgId).all()
+}
+
+// FIRE: headers.first(name:) feeding a tenant filter.
+func projectListVuln(req: Request) async throws -> [Project] {
+    let tenant = req.headers.first(name: "X-Tenant-Id") ?? ""
+    // ruleid: mcp-authz-scope-from-request-header-swift
+    return try await Project.query(on: req.db).filter(\.$tenantId == tenant).all()
+}
+
+// FIRE: finder keyed by the header value.
+func accountShowVuln(req: Request) async throws -> Account? {
+    // ruleid: mcp-authz-scope-from-request-header-swift
+    return try await Account.find(req.headers["x-account-id"].first, on: req.db)
+}
+
+// OK (legitimate neighbor): a correlation header as a finder key is not a
+// scope header. Pins the header-name regex of the subscript source.
+func auditShow(req: Request) async throws -> AuditEvent? {
+    // ok: mcp-authz-scope-from-request-header-swift
+    return try await AuditEvent.find(req.headers["x-request-id"].first, on: req.db)
+}
+
+// OK: the same through headers.first(name:). Pins its header-name regex.
+func auditShowFirst(req: Request) async throws -> AuditEvent? {
+    // ok: mcp-authz-scope-from-request-header-swift
+    return try await AuditEvent.find(req.headers.first(name: "X-Request-Id"), on: req.db)
+}
+
+// OK: the header narrows a non-scope key inside the session's org. Pins the
+// scope-key regex.
+func listEventsFromIp(req: Request, token: String) async throws -> [Event] {
+    let session = try await resolveSession(req: req, token: token)
+    let clientIp = req.headers["x-forwarded-for"].first ?? ""
+    return try await Event.query(on: req.db)
+        .filter(\.$orgId == session.orgId)
+        // ok: mcp-authz-scope-from-request-header-swift
+        .filter(\.$sourceIp == clientIp)
+        .all()
 }
 
 struct Session { let orgId: String; let clientIp: String }

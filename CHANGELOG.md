@@ -86,6 +86,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-swift` matched nothing, for the same
+  reasons. It is now a taint rule from `req.headers[...]` and
+  `req.headers.first(name:)` to a Fluent `filter` on a scope key path or a
+  `find(_:on:)` by key. A filter finding sits on the compared value, so a
+  chained query reports the filter line. The fixture gained two positives and
+  three neighbors; removing any one guard makes it fail.
 - `mcp-authz-scope-from-request-header-kotlin` matched nothing, for the same
   reasons. It is now a taint rule from `call.request.header(...)`,
   `call.request.headers[...]` and Spring `@RequestHeader` parameters to a
