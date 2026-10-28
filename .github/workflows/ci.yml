@@ -90,7 +90,16 @@ jobs:
               process.exit(1);
             }
             const got = d.results.length;
-            const want = 81; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+            const want = 86; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+                             //   2026-10-28: 81->86. mcp-authz-scope-from-request-header (JS)
+                             //   fired nowhere in its fixture: its header read and its
+                             //   scoping call were two positive patterns under one
+                             //   `patterns`, which must match the same range. It is now a
+                             //   taint rule reporting at the scoping argument: 3 existing
+                             //   cases + 2 new `.get` cases. The new legitimate neighbors
+                             //   (correlation header, recorded IP, non-scope query field,
+                             //   quota lookup, header org in audit/quota/trace objects)
+                             //   stay silent.
                              //   2026-10-28: 78->81. xff-for-ratelimit.py, the first positive
                              //   fixture for mcp-ratelimit-scope-from-forwarded-header-py: three
                              //   header-keyed quota checks (or-fallback via .get, or-fallback via

@@ -45,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `mcp-authz-scope-from-request-header` (JavaScript/TypeScript) fired nowhere,
+  not even on its own fixture. The header read and the scoping call were two
+  positive patterns in one `patterns` block, which semgrep requires to match the
+  same range, so no code could satisfy both. The rule is now a taint rule from
+  the scope header to the scoping argument, and reports at that argument. It
+  also covers `headers.get(...)`, skips the header accessor itself, and leaves
+  quota and rate-limit calls to `mcp-ratelimit-scope-from-forwarded-header`.
+  The fixture gained two `.get` positives and five legitimate neighbors that
+  together pin every guard of the rule (each guard, removed on its own, makes
+  the fixture fail).
 - `detection/README.md` said every rule fires on its vulnerable fixture and stays
   silent on the fixed one. Measured with semgrep 1.182.1, 13 of 45 rules fire
   nowhere in their own fixtures and 5 more fire on fewer lines than marked

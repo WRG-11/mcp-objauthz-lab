@@ -772,24 +772,52 @@ rules:
   message: An MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the transport request and USES IT to select the authorization scope (e.g., passes it to a store list call, binds
     it as orgId in a query). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Over the streamable-HTTP transport this value arrives
     in extra.requestInfo.headers; derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-    - pattern: $HDRVAL = $E.requestInfo.headers[$HDR]
-    - pattern: $HDRVAL = $E.requestInfo.headers.get($HDR)
-    - pattern: $HDRVAL = $REQ.headers[$HDR]
-    - pattern: $HDRVAL = $REQ.headers.get($HDR)
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
-  - pattern-either:
-    - pattern: $STORE.$METHOD(..., $HDRVAL, ...)
-    - pattern: '$STORE.$METHOD({ ..., $KEY: $HDRVAL, ... })'
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(list|find|get|search|query|select).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  # Taint mode: the header read and the scoping call are separate statements,
+  # often with an intermediate variable or a fallback in between. A `patterns`
+  # block cannot express that (every positive pattern must match the same
+  # range), and the earlier version of this rule fired nowhere in its fixture.
+  # The finding is reported at the sink: the argument that selects the scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    # $REQ also binds `extra.requestInfo`, so the MCP transport spelling
+    # (extra.requestInfo.headers[...]) is covered by the same forms. Semgrep
+    # matches `a?.b?.[x]` with `a.b[x]`, but not `a?.b?.get(x)` with
+    # `a.b.get(x)`, so only the call form needs an optional-chained copy.
+    - pattern-either:
+      - pattern: $REQ.headers[$HDR]
+      - pattern: $REQ.headers.get($HDR)
+      - pattern: $REQ?.headers?.get($HDR)
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  pattern-sinks:
+  # Quota and rate-limit calls are left to mcp-ratelimit-scope-from-forwarded-header
+  # (S11), which reports the same header there; both sinks skip them.
+  # A positional argument of a scoping call. Object-literal arguments are left
+  # to the next sink, which only accepts a scope-named key.
+  - patterns:
+    - pattern: $STORE.$METHOD(..., $ARG, ...)
+    # The Headers accessor is a get* call too: without this, every
+    # `headers.get("x-org-id")` read reports itself.
+    - pattern-not: $REQ.headers.get(...)
+    - pattern-not: $REQ?.headers?.get(...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $ARG
+        regex: ^[^{]
+    - focus-metavariable: $ARG
+  - patterns:
+    - pattern: '$STORE.$METHOD({ ..., $KEY: $VAL, ... })'
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+    - focus-metavariable: $VAL
   metadata:
     cwe:
     - CWE-639
