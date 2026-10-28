@@ -154,6 +154,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   neighbor per guard; every guard fails its fixture when removed (107
   mutants across the seven rules). Fixture findings 179 -> 211; the
   annotation baseline drops 11 missed and 5 wrongly fired entries.
+- `mcp-unscoped-query-object-fetch-py` knew `filter_by(id=...)` and
+  `session.get(Model, id)` but not SQLAlchemy 2.0's
+  `select(Model).where(Model.id == x)`, so a FastAPI handler that loads a
+  tenant-owned row by a path id with no tenant filter went unseen. The new
+  branch reports that lookup only inside a route handler (`@router.get(...)`
+  and the other method decorators) whose parameter is the id, and stays
+  silent when the same query also filters by a tenant or owner key or when
+  the id goes to a check call (`require_...`, `check_...`, `verify_...`,
+  `..._membership(...)`) earlier in the handler. Measured on one real FastAPI
+  MCP server: the bare shape fired 72 times for 3 real bugs; with these
+  limits it fires 6 times, the 3 bugs among them. The fixture gained 4
+  positives and 9 neighbors (10 mutants, all killed).
 - `mcp-unscoped-query-object-fetch-swift` matched nothing: it had no Fluent
   shape (`find($ID)` with one argument, where Fluent's is `find(id, on: db)`,
   and `query(\.id == ...)`, which is not Fluent syntax). It is now a taint

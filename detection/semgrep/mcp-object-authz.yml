@@ -756,6 +756,50 @@ rules:
           patterns:
           - pattern-not: "'...'"
           - pattern-not: '"..."'
+    # SQLAlchemy 2.0: select(Model).where(Model.id == x). Reported only inside
+    # a route handler whose parameter is the id. A service function's id comes
+    # from a caller that may have checked it already; on one real FastAPI
+    # server the unrestricted shape fired 72 times for 3 real bugs, and 6
+    # times with these filters. Silent when the same query also filters by a
+    # tenant or owner key, or when the id is passed to a check call (a name
+    # with require/check/verify/ensure/assert/authoriz/permission/membership/
+    # can_) earlier in the handler.
+    - patterns:
+      # `def` also matches `async def`.
+      - pattern-inside: |
+          @$R.$VERB(...)
+          def $F(..., $ID: $T, ...):
+            ...
+      - metavariable-regex:
+          metavariable: $VERB
+          regex: ^(get|post|put|patch|delete|api_route)$
+      - pattern-either:
+        - pattern: select($M).where($M.id == $ID)
+        - pattern: select($M).where($ID == $M.id)
+      - pattern-not:
+          patterns:
+          - pattern-either:
+            - pattern: select($M).where($M.id == $ID)
+            - pattern: select($M).where($ID == $M.id)
+          - pattern-either:
+            - pattern-inside: $C.where($M2.$KEY == $V)
+            - pattern-inside: $C.where($V == $M2.$KEY)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i)^(workspace_id|project_id|organization_id|org_id|tenant_id|account_id|user_id|owner_id|team_id|realm_id|namespace_id|created_by|creator_id)$
+      - pattern-not:
+          patterns:
+          - pattern-either:
+            - pattern: select($M).where($M.id == $ID)
+            - pattern: select($M).where($ID == $M.id)
+          # The call form also matches the call under `await` and on the
+          # right of an assignment.
+          - pattern-inside: |
+              $CHECK(..., $ID, ...)
+              ...
+          - metavariable-regex:
+              metavariable: $CHECK
+              regex: (?i).*(require|check|verify|ensure|assert|authoriz|permission|membership|can_).*
   metadata:
     cwe:
     - CWE-639
