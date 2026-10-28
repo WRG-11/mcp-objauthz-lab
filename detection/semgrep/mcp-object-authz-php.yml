@@ -4,26 +4,42 @@ rules:
   - php
   severity: WARNING
   message: A Laravel/Symfony MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to an Eloquent query, binds it as org_id in a where clause). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-      - pattern: $request->header($HDR)
-      - pattern: $request->headers->get($HDR)
-      - pattern: $request->getHeaderLine($HDR)
-      - pattern: $request->hasHeader($HDR)
-      - pattern: $_SERVER[$HDR]
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern-either:
-      - pattern: $MODEL::$METHOD(..., $hdrval, ...)
-      - pattern: $MODEL::where($KEY, $hdrval)->...
-      - pattern: $MODEL::where($KEY, $hdrval, ...)->...
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(where|find|findOrFail|first|get|select|all).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+  # Taint mode: the header read and the query are separate statements. The
+  # earlier version put both under one `patterns` (which must match the same
+  # range), compared header names without their quotes, and referenced
+  # $hdrval/$KEY inconsistently, so it matched nothing. The finding is
+  # reported at the value that selects the scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $R->header($HDR, ...)
+      - pattern: $R->headers->get($HDR, ...)
+      - pattern: $R->getHeaderLine($HDR)
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  - patterns:
+    - pattern: $_SERVER[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["']HTTP_(X_ORG_ID|X_ORG|X_TENANT_ID|X_TENANT|X_WORKSPACE_ID|X_ACCOUNT_ID|X_CUSTOMER_ID|X_PROJECT_ID|X_USER_ID|X_FORWARDED_FOR|X_REAL_IP|X_CLIENT_IP)["']$
+  pattern-sinks:
+  # A scope-named column in a where clause. One pattern covers both
+  # Model::where(...) and a chained ->where(...) (measured: each spelling
+  # alone matches both). client_ip is the IP-scoping variant of S10.
+  - patterns:
+    - pattern: $Q->where($K, $V, ...)
+    - metavariable-regex:
+        metavariable: $K
+        regex: (?i)^["'](org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id|client_ip)["']$
+    - focus-metavariable: $V
+  # A static finder by key; the call is the sink.
+  - patterns:
+    - pattern: $M::$METHOD($V, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(find|findOrFail|findMany|firstWhere)$
   metadata:
     cwe:
     - CWE-639

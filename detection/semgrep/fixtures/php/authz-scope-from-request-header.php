@@ -21,46 +21,49 @@
 use Illuminate\Http\Request;
 use Psr\Http\Message\ServerRequestInterface;
 
+// The rule is a taint rule, so a finding sits on the SINK: the value that
+// selects the scope in a query. `ruleid:` markers are above that query.
+
 // FIRE: getHeaderLine consumed by requireAuth / token compare / tenant pick (canonical S10)
 function noteGetScopedVuln(ServerRequestInterface $request, string $token): array {
     $session = resolveSession($token);
-    // ruleid: mcp-authz-scope-from-request-header-php
     $auth = $request->getHeaderLine('Authorization');
     if (!$auth) { return ['error' => 'missing authorization header']; }
     // ... token compare / tenant pick using $auth
     $headerOrg = $request->getHeaderLine('x-org-id') ?? $session->org_id;
+    // ruleid: mcp-authz-scope-from-request-header-php
     return Note::where('org_id', $headerOrg)->get()->toArray();
 }
 
 // FIRE: Laravel $request->header() with authz decision
 function noteGetScopedLaravelVuln(Request $request, string $token): \Illuminate\Database\Eloquent\Collection {
     $session = resolveSession($token);
-    // ruleid: mcp-authz-scope-from-request-header-php
     $headerOrg = $request->header('x-org-id') ?? $session->org_id;
+    // ruleid: mcp-authz-scope-from-request-header-php
     return Note::where('org_id', $headerOrg)->get();
 }
 
 // FIRE (IP-scoping variant): X-Forwarded-For used to select client IP scope
 function noteGetScopedByIpVuln(Request $request, string $token): \Illuminate\Database\Eloquent\Collection {
     $session = resolveSession($token);
-    // ruleid: mcp-authz-scope-from-request-header-php
     $fwd = $request->header('x-forwarded-for') ?? $session->client_ip;
+    // ruleid: mcp-authz-scope-from-request-header-php
     return Note::where('client_ip', $fwd)->get();
 }
 
 // FIRE: header used directly as org_id in a query filter (authz decision)
 function noteGetByQueryVuln(Request $request, string $token, string $id): ?Note {
     $session = resolveSession($token);
-    // ruleid: mcp-authz-scope-from-request-header-php
     $headerOrg = $request->header('x-org-id') ?? $session->org_id;
+    // ruleid: mcp-authz-scope-from-request-header-php
     return Note::where('id', $id)->where('org_id', $headerOrg)->first();
 }
 
 // FIRE: PSR-7 $request->getHeaderLine (raw) with authz decision
 function noteGetScopedPsr7Vuln(ServerRequestInterface $request, string $token): array {
     $session = resolveSession($token);
-    // ruleid: mcp-authz-scope-from-request-header-php
     $headerOrg = $request->getHeaderLine('x-org-id') ?? $session->org_id;
+    // ruleid: mcp-authz-scope-from-request-header-php
     return Note::where('org_id', $headerOrg)->get()->toArray();
 }
 
@@ -107,6 +110,66 @@ function logHeaders(Request $request): void {
     // ok: mcp-authz-scope-from-request-header-php
     $xff = $request->header('x-forwarded-for');
     logger()->info('headers', ['xff' => $xff]);
+}
+
+// FIRE: Symfony HeaderBag read feeding a workspace filter.
+function documentListSymfonyVuln(\Symfony\Component\HttpFoundation\Request $request): array {
+    $ws = $request->headers->get('X-Workspace-Id');
+    // ruleid: mcp-authz-scope-from-request-header-php
+    return Document::where('workspace_id', $ws)->get()->toArray();
+}
+
+// FIRE: raw $_SERVER header feeding a tenant filter.
+function projectListServerVuln(): array {
+    $tenant = $_SERVER['HTTP_X_TENANT_ID'];
+    // ruleid: mcp-authz-scope-from-request-header-php
+    return Project::where('tenant_id', $tenant)->get()->toArray();
+}
+
+// FIRE: a static finder keyed by the header value.
+function accountShowVuln(Request $request): Account {
+    // ruleid: mcp-authz-scope-from-request-header-php
+    return Account::findOrFail($request->header('x-account-id'));
+}
+
+// OK (legitimate neighbor): a correlation header used as a finder key is not a
+// scope header. Pins the header-name regex.
+function auditShow(Request $request): AuditEvent {
+    // ok: mcp-authz-scope-from-request-header-php
+    return AuditEvent::findOrFail($request->header('x-request-id'));
+}
+
+// OK: a non-scope $_SERVER entry. Pins the $_SERVER name regex.
+function listByServerRequestId(): array {
+    $reqId = $_SERVER['HTTP_X_REQUEST_ID'];
+    // ok: mcp-authz-scope-from-request-header-php
+    return AuditEvent::findMany([$reqId]);
+}
+
+// OK: the header narrows a non-scope column inside the session's org. Pins the
+// scope-column regex.
+function listEventsFromIp(Request $request, string $token): array {
+    $session = resolveSession($token);
+    $clientIp = $request->header('x-forwarded-for');
+    // ok: mcp-authz-scope-from-request-header-php
+    return Event::where('org_id', $session->org_id)->where('source_ip', $clientIp)->get()->toArray();
+}
+
+// OK: same query with the filters in the other order: the scope column takes
+// the session value; the header only narrows source_ip earlier in the chain.
+// Pins the focus on the scope value.
+function listEventsFromIpReordered(Request $request, string $token): array {
+    $session = resolveSession($token);
+    $clientIp = $request->header('x-forwarded-for');
+    // ok: mcp-authz-scope-from-request-header-php
+    return Event::where('source_ip', $clientIp)->where('org_id', $session->org_id)->get()->toArray();
+}
+
+// OK: the header value is written, not used to pick whose rows are read. Pins
+// the finder-method regex.
+function recordAccess(Request $request): AccessLog {
+    // ok: mcp-authz-scope-from-request-header-php
+    return AccessLog::create($request->header('x-forwarded-for'));
 }
 
 function resolveSession(string $token): object { return new class { public $org_id = ''; public $client_ip = ''; }; }

@@ -70,6 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one argument; header accessors and quota calls are skipped. The fixture
   gained three positives and four neighbors; removing any one guard makes it
   fail.
+- `mcp-authz-scope-from-request-header-php` matched nothing, for the same
+  reasons as the Java rule. It is now a taint rule from Laravel `header()`,
+  Symfony `headers->get()`, PSR-7 `getHeaderLine()` and `$_SERVER['HTTP_X_...']`
+  to a scope-named column in a `where` clause (`client_ip` included, for the
+  IP-scoping variant) or a static finder. The first positive's marker sat on an
+  `Authorization` read that is not a scope header; it now sits on the query
+  that uses `x-org-id`. The fixture gained three positives and five neighbors;
+  removing any one guard makes it fail.
 - `mcp-batch-resolve-missing-per-item-scope-filter-py` matched only an
   assignment (`x = [store.get_x(i) for i in ids]`), so a handler that returns
   the comprehension directly, the shape of its own positive fixture, was never
