@@ -82,6 +82,8 @@ func projectListVuln(req: Request) async throws -> [Project] {
 
 // FIRE: finder keyed by the header value.
 func accountShowVuln(req: Request) async throws -> Account? {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-swift
     // ruleid: mcp-authz-scope-from-request-header-swift
     return try await Account.find(req.headers["x-account-id"].first, on: req.db)
 }
@@ -89,12 +91,16 @@ func accountShowVuln(req: Request) async throws -> Account? {
 // OK (legitimate neighbor): a correlation header as a finder key is not a
 // scope header. Pins the header-name regex of the subscript source.
 func auditShow(req: Request) async throws -> AuditEvent? {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-swift
     // ok: mcp-authz-scope-from-request-header-swift
     return try await AuditEvent.find(req.headers["x-request-id"].first, on: req.db)
 }
 
 // OK: the same through headers.first(name:). Pins its header-name regex.
 func auditShowFirst(req: Request) async throws -> AuditEvent? {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-swift
     // ok: mcp-authz-scope-from-request-header-swift
     return try await AuditEvent.find(req.headers.first(name: "X-Request-Id"), on: req.db)
 }

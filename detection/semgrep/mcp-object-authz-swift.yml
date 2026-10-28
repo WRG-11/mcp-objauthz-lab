@@ -78,15 +78,51 @@ rules:
   - swift
   severity: WARNING
   message: An object is fetched by id through a query that carries no tenant key (workspaceId / projectId / organizationId / orgId / tenantId / accountId / userId / ownerId). If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
-  patterns:
-  - pattern-either:
-    - pattern: $REPO.find($ID)
-    - pattern: $REPO.query(\.id == $ID).first()
-    - pattern: $REPO.all().filter { it.id == $ID }.first
-    - pattern: $REPO.delete($ID)
-  - metavariable-regex:
-      metavariable: $REPO
-      regex: .*Repository|.*Model|.*Controller
+  # The earlier version had no Fluent shape: `find($ID)` with one argument
+  # (Fluent's is `find(id, on: db)`), and `query(\.id == ...)` and
+  # `filter { it.id == ... }`, which are not Fluent syntax. It matched none of
+  # its fixture cases.
+  #
+  # The id must come from the caller: a parameter of the enclosing function, or
+  # a route parameter (`req.parameters.get`) in a closure route. The request is
+  # caller input, but the user it authenticated is not, so an id read through
+  # `req.auth` is a server-side value.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        func $F(..., $P: $T, ...) { ... }
+    - pattern: $P
+  - pattern: $R.parameters.get(...)
+  pattern-sanitizers:
+  - pattern: $R.auth.require(...)
+  - pattern: $R.auth.get(...)
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      # `Model.find(id, on: db)`. The class-name filter keeps out an object
+      # receiver.
+      - patterns:
+        - pattern: '$MODEL.find($ID, on: $DB)'
+        - metavariable-regex:
+            metavariable: $MODEL
+            regex: ^[A-Z][A-Za-z0-9_]*$
+      # `Model.query(on: db).filter(\.$id == id)` ending in `.first()` or
+      # `.delete()`, with the id as its only filter. A tenant filter in the
+      # chain, or a query through a parent (`user.$notes.query(on:)`), stays
+      # silent. The parser binds a leading `try await` into the receiver, so
+      # the text filter allows it.
+      - patterns:
+        - pattern-either:
+          - pattern: $X.first()
+          - pattern: $X.delete()
+        - metavariable-regex:
+            metavariable: $X
+            regex: ^(try\s+)?(await\s+)?[A-Z][A-Za-z0-9_]*\.query\(on:[^()]*\)\s*\.filter\(\\\.\$id\s*==\s*[^()]*\)$
+        - metavariable-pattern:
+            metavariable: $X
+            pattern: $Q.filter($KP == $ID)
+    - focus-metavariable: $ID
   metadata:
     cwe:
     - CWE-639

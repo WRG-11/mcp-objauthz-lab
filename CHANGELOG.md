@@ -86,6 +86,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-unscoped-query-object-fetch-swift` matched nothing: it had no Fluent
+  shape (`find($ID)` with one argument, where Fluent's is `find(id, on: db)`,
+  and `query(\.id == ...)`, which is not Fluent syntax). It is now a taint
+  rule: the id must come from a function parameter, or from
+  `req.parameters.get` in a closure route, and reach `Model.find(id, on:)` or
+  a `Model.query(on:)` chain whose only filter is `\.$id` and that ends in
+  `.first()` or `.delete()`. An id read through `req.auth` stays silent, as do
+  a tenant filter in the chain and a query through a parent relation. The
+  Swift parser binds a leading `try await` into the receiver of `.first()`, so
+  the chain filter allows it. In 90 public Swift repositories there is no
+  Fluent query (the one match is inside a string literal), so the rule fires
+  0 times there and its precision and recall on real code are unmeasured.
 - `mcp-unscoped-query-object-fetch-php` only fired on Contao `findByPk` and
   `findBy`: a `$MODEL` filter (`.*Model|.*Eloquent`) on the whole rule left
   out the repository branch, which never binds `$MODEL`, and every Eloquent

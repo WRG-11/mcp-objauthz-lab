@@ -90,7 +90,10 @@ jobs:
               process.exit(1);
             }
             const got = d.results.length;
-            const want = 171; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+            const want = 179; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+                             //   2026-10-28: 171->179. mcp-unscoped-query-object-fetch-swift had no
+                             //   Fluent shape and matched nothing. Now taint from caller input:
+                             //   5 cases in its own fixture + 3 header-fixture finders (8).
                              //   2026-10-28: 160->171. mcp-unscoped-query-object-fetch-php only
                              //   fired on Contao findByPk/findBy (whole-rule $MODEL filter
                              //   `.*Model|.*Eloquent`). Now taint from caller input: 9 cases in
