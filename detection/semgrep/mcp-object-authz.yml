@@ -607,6 +607,14 @@ rules:
   - metavariable-regex:
       metavariable: $FUNC
       regex: (?i).*admin.*
+  # Only a tool registration counts. Any other decorator (a typer/click CLI
+  # command, a route) is not reachable through an MCP call. Real-capture FP:
+  # a loopback-only `@app.command() def admin(...)` in an MCP server repo.
+  - metavariable-pattern:
+      metavariable: $DEC
+      pattern-either:
+      - pattern: $X.tool
+      - pattern: $X.tool(...)
   - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    require_admin_role(...)\n    ...\n"
   - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    check_admin_role(...)\n    ...\n"
   - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    assert_admin_role(...)\n    ...\n"

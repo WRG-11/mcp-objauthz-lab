@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `mcp-admin-named-tool-missing-role-check-py` fired on any decorator, so a
+  typer/click CLI command named `admin` was reported as an unguarded MCP tool.
+  The rule now requires a tool registration decorator (`@<x>.tool` or
+  `@<x>.tool(...)`), which is what its message describes. The new negative
+  fixture `admin-named-cli-command-not-a-tool.py` comes from a real false
+  positive (a loopback-only admin panel command in an MCP server repository)
+  and is on the CI silence list. The fixture total stays at 78; the existing
+  positive case still fires.
 - Twelve references in the rule files pointed at three README anchors that no
   longer existed (`#scenario-s6--foreign-parent`,
   `#scenario-s11--xff-quota-bypass`, `#scenario-s13--jwt-token-scope-confusion`).
