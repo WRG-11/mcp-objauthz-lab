@@ -371,10 +371,21 @@ rules:
       - metavariable-regex:
           metavariable: $FUNC
           regex: (?i).*(all|every|global|unscoped).*
-    - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+    - patterns:
+      - pattern-either:
+        - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      # A ternary whose wide branch is a string literal picks a label or a CSS
+      # class, it widens nothing. Real-capture FP: a UI filter button rendered
+      # with `scope === 'all' ? 'active' : ''` (wildcard-in-markup.js).
+      - metavariable-pattern:
+          metavariable: $WIDE
+          patterns:
+          - pattern: $X
+          - pattern-not: "'...'"
+          - pattern-not: '"..."'
     - patterns:
       - pattern: if ($PARAM === "*") { ... }
       - pattern-not: 'if ($PARAM === "*") { ... }

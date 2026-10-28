@@ -145,7 +145,7 @@ jobs:
             // SILENT and the hardened positive fixtures must still FIRE, so a later regex tweak
             // cannot quietly gut either the false-positive fix or the true positive it protects.
             const byFile = (sub) => d.results.filter((r) => r.path.includes(sub));
-            for (const s of ["batch-resolve-local-map-get", "write-parent-server-derived-value", "admin-named-cli-command-not-a-tool"]) {
+            for (const s of ["batch-resolve-local-map-get", "write-parent-server-derived-value", "admin-named-cli-command-not-a-tool", "wildcard-in-markup"]) {
               if (byFile(s).length) {
                 console.error("negative fixture " + s + " must be SILENT but fired " + byFile(s).length + " time(s)");
                 process.exit(1);

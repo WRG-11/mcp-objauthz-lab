@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `mcp-wildcard-sentinel-scope-bypass` fired on a ternary whose wide branch is
+  a string literal, so a UI filter button rendered with
+  `scope === 'all' ? 'active' : ''` was reported as a scope bypass. A string
+  literal in that branch picks a label or a CSS class and widens nothing; the
+  ternary forms now require a non-literal wide branch. The real-capture case
+  (a scanned MCP server's web UI) is added to `wildcard-in-markup.js`, which
+  joins the CI silence list. Fixture total unchanged; the positive ternary
+  cases in JavaScript and Python still fire.
 - `mcp-ratelimit-scope-from-forwarded-header-py` had no positive fixture and
   missed the most common quota shape: once the header value was stored in a
   variable, a counter call inside an `if` condition
