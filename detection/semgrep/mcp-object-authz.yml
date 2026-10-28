@@ -833,22 +833,54 @@ rules:
   message: A FastMCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) via get_http_headers() and USES IT to select the authorization scope (e.g., passes it to a store list call, binds
     it as org_id in a query). A request header is entirely client-controlled, so it must never decide whose data a tool returns; derive the scope from the server-trusted session instead. CWE-639/CWE-290
     -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-    - pattern: $HDRVAL = $H.get($HDR)
-    - pattern: $HDRVAL = $H[$HDR]
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
-  - pattern-either:
-    - pattern: $STORE.$METHOD(..., $HDRVAL, ...)
-    - pattern: $STORE.$METHOD(..., $KEY = $HDRVAL, ...)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(list|find|get|search|query|select).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+  # Taint mode, for the same reason as the JavaScript rule: the header read
+  # and the scoping call are separate statements, which one `patterns` block
+  # cannot match. The finding is reported at the argument that selects the
+  # scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $H.get($HDR)
+      - pattern: $H[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  # Quota and rate-limit calls are left to
+  # mcp-ratelimit-scope-from-forwarded-header-py (S11).
+  pattern-sinks:
+  # A positional argument of a scoping call. Dict literals go to the next
+  # sink, which only accepts a scope-named key.
+  - patterns:
+    - pattern: $STORE.$METHOD(..., $ARG, ...)
+    # The header accessor is a get* call with a string literal: without this,
+    # every headers.get("x-org-id") read reports itself.
+    - pattern-not: $X.get("...")
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $ARG
+        regex: ^[^{]
+    - focus-metavariable: $ARG
+  - patterns:
+    - pattern: '$STORE.$METHOD(..., {..., $K: $VAL, ...}, ...)'
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $K
+        regex: (?i)^["'](org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)["']$
+    - focus-metavariable: $VAL
+  - patterns:
+    - pattern: $STORE.$METHOD(..., $KEY=$VAL, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+    - focus-metavariable: $VAL
   metadata:
     cwe:
     - CWE-639

@@ -1,9 +1,6 @@
 {
   "_comment": "Known per-annotation failures of the detection fixtures, measured 2026-10-28 with semgrep 1.182.1. A key is <fixture>|<rule>|<marked line text>. detection/check-annotations.js fails CI on any failure not listed here and on any listed entry that no longer fails. Remove an entry in the same commit that fixes it; do not add entries to make a new rule pass.",
   "missed": [
-    "authz-scope-from-request-header.py|mcp-authz-scope-from-request-header-py|fwd = headers.get(\"x-forwarded-for\")",
-    "authz-scope-from-request-header.py|mcp-authz-scope-from-request-header-py|header_org = headers.get(\"x-org-id\")",
-    "authz-scope-from-request-header.py|mcp-authz-scope-from-request-header-py|header_org = headers.get(\"x-org-id\")",
     "batch-resolve-missing-per-item-scope-filter.py|mcp-batch-resolve-missing-per-item-scope-filter-py|return [store.get_note(f) for f in ids]",
     "client-supplied-scope-overrides-session.go|mcp-client-supplied-scope-overrides-session-go|return nil, SearchOut{Notes: store.SearchNotesByOrg(scope, args.Query)}, nil",
     "csharp/authz-scope-from-request-header.cs|mcp-authz-scope-from-request-header-csharp|if (request.Headers.TryGetValue(\"X-Org-Id\", out var headerOrgVal)) {",

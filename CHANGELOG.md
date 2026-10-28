@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The fixture gained two `.get` positives and five legitimate neighbors that
   together pin every guard of the rule (each guard, removed on its own, makes
   the fixture fail).
+- `mcp-authz-scope-from-request-header-py` had the same defect and fired
+  nowhere. It is now a taint rule with three sinks: a positional argument, a
+  scope-named key in a dict literal, and a scope-named keyword argument. Its
+  fixture gained a subscript-read positive, a keyword-argument positive, and
+  legitimate neighbors for every guard; quota calls are left to
+  `mcp-ratelimit-scope-from-forwarded-header-py`.
 - `detection/README.md` said every rule fires on its vulnerable fixture and stays
   silent on the fixed one. Measured with semgrep 1.182.1, 13 of 45 rules fire
   nowhere in their own fixtures and 5 more fire on fewer lines than marked
