@@ -75,6 +75,101 @@ def log_scope_value(scope)
   logger.info("wildcard scope requested") if scope == "*"
 end
 
+# FIRE: the "all" spelling alone.
+def vuln_export_all(token, tenant)
+  session = resolve_session(token)
+  # ruleid: mcp-wildcard-sentinel-scope-bypass-ruby
+  if tenant == "all"
+    Note.all
+  else
+    Note.where(org_id: session.org_id)
+  end
+end
+
+# FIRE: unscoped, the ActiveRecord escape from a default tenant scope.
+def vuln_export_unscoped(token, org_id)
+  session = resolve_session(token)
+  # ruleid: mcp-wildcard-sentinel-scope-bypass-ruby
+  if org_id == "*"
+    return Note.unscoped
+  end
+  Note.where(org_id: session.org_id)
+end
+
+# FIRE: find_each over the whole table.
+def vuln_export_each(token, org_id)
+  session = resolve_session(token)
+  # ruleid: mcp-wildcard-sentinel-scope-bypass-ruby
+  if org_id == "*"
+    Note.find_each { |n| export(n) }
+  end
+end
+
+# FIRE: the "all" spelling of the ternary.
+def vuln_export_ternary_all(token, tenant)
+  session = resolve_session(token)
+  # ruleid: mcp-wildcard-sentinel-scope-bypass-ruby
+  tenant == "all" ? Note.all : Note.where(org_id: session.org_id)
+end
+
+# OK: the wildcard branch narrows; the whole-table read is in the else
+# branch, which the wildcard does not reach. Pins the then-branch search.
+def export_inverted(token, org_id)
+  session = resolve_session(token)
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  if org_id == "*"
+    Note.where(org_id: session.org_id)
+  else
+    Note.all
+  end
+end
+
+# OK: `all` on a value the method already holds is not a model read. Pins the
+# model-class filter.
+def flatten_scoped(groups, scope)
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  if scope == "*"
+    groups.all
+  end
+end
+
+# OK: guarded by check_admin_role. Pins that guard.
+def fixed_export_checked(token, org_id)
+  session = resolve_session(token)
+  check_admin_role(session)
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  if org_id == "*"
+    Note.all
+  end
+end
+
+# OK: guarded by assert_admin_role. Pins that guard.
+def fixed_export_asserted(token, org_id)
+  session = resolve_session(token)
+  assert_admin_role(session)
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  if org_id == "*"
+    Note.all
+  end
+end
+
+# OK: "all" on an export format, not a scope. Pins the parameter-name regex
+# of both forms.
+def export_fields(format)
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  if format == "all"
+    Field.all
+  end
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  format == "*" ? Field.all : Field.defaults
+end
+
+# OK: a ternary that picks a CSS class. Pins the string-literal exclusion.
+def filter_button_class(scope)
+  # ok: mcp-wildcard-sentinel-scope-bypass-ruby
+  scope == "all" ? "active" : ""
+end
+
 def resolve_session(token); end
 def require_admin_role(session); end
 def logger; end

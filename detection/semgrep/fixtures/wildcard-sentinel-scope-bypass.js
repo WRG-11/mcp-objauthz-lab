@@ -73,3 +73,53 @@ function logScopeValue(scope) {
     logger.info("wildcard scope requested");
   }
 }
+
+// FIRE: the widening call is a plain function, not a store method.
+async function vulnExportPlain({ token, org_id }) {
+  const session = resolveSession(store, token);
+  // ruleid: mcp-wildcard-sentinel-scope-bypass
+  if (org_id === "all") {
+    return ok(getAllNotes());
+  }
+  return ok(store.listNotesByOrg(session.orgId));
+}
+
+// FIRE: the "all" spelling of the ternary.
+async function vulnExportTernaryAll({ token, tenant }) {
+  const session = resolveSession(store, token);
+  // ruleid: mcp-wildcard-sentinel-scope-bypass
+  return ok(tenant === "all" ? store.listAllNotes() : store.listNotesByOrg(session.orgId));
+}
+
+// OK: guarded by checkAdminRole. Pins that guard.
+async function fixedExportChecked({ token, org_id }) {
+  const session = resolveSession(store, token);
+  checkAdminRole(session);
+  // ok: mcp-wildcard-sentinel-scope-bypass
+  if (org_id === "*") {
+    return ok(store.listAllNotes());
+  }
+  return ok(store.listNotesByOrg(session.orgId));
+}
+
+// OK: guarded by assertAdminRole. Pins that guard.
+async function fixedExportAsserted({ token, org_id }) {
+  const session = resolveSession(store, token);
+  assertAdminRole(session);
+  // ok: mcp-wildcard-sentinel-scope-bypass
+  if (org_id === "*") {
+    return ok(store.listAllNotes());
+  }
+  return ok(store.listNotesByOrg(session.orgId));
+}
+
+// OK: "all" on an export format, not a scope. Pins the parameter-name regex
+// of both forms.
+function exportFields(format) {
+  // ok: mcp-wildcard-sentinel-scope-bypass
+  if (format === "all") {
+    return exporter.listAllFields();
+  }
+  // ok: mcp-wildcard-sentinel-scope-bypass
+  return format === "*" ? exporter.listAllFields() : exporter.defaultFields();
+}

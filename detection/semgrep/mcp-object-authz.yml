@@ -345,38 +345,47 @@ rules:
   message: A magic "all"/*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*"
     or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's
     literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  # The comparison must be the condition of an `if` whose body widens the
+  # read (a listAll/getAll/findAll call), or a ternary whose wide branch is
+  # not a string literal. The earlier version matched the comparison and the
+  # widening call as two separate ranges; the two never overlap (one is in
+  # the condition, the other in the body), so no `if` ever fired, in
+  # JavaScript or in Python. The `if` form now reports the whole statement.
+  # The same pattern matches a Python `if`, so the rule covers it without a
+  # separate sibling.
   patterns:
   - pattern-either:
-    - pattern: $PARAM === "*"
-    - pattern: $PARAM === "all"
-    - pattern: $PARAM == "*"
-    - pattern: $PARAM == "all"
-  - metavariable-regex:
-      metavariable: $PARAM
-      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-  - pattern-either:
     - patterns:
-      - pattern: if ($PARAM === "*") { ... }
+      - pattern: |
+          if ($COND) { ... }
+      - metavariable-pattern:
+          metavariable: $COND
+          patterns:
+          - pattern-either:
+            - pattern: $PARAM === "*"
+            - pattern: $PARAM === "all"
+            - pattern: $PARAM == "*"
+            - pattern: $PARAM == "all"
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
       - pattern-either:
-        - pattern: $STORE.$METHOD()
-        - pattern: return $STORE.$METHOD()
+        - pattern: |
+            if ($COND) { ... <... $STORE.$METHOD(...) ...>; ... }
+        - pattern: |
+            if ($COND) { ... <... $METHOD(...) ...>; ... }
       - metavariable-regex:
           metavariable: $METHOD
-          regex: (?i)^(listAll|all|getAll|findAll|selectAll).*
-    - patterns:
-      - pattern: if ($PARAM === "*") { ... }
-      - pattern-either:
-        - pattern: $FUNC()
-        - pattern: return $FUNC()
-      - metavariable-regex:
-          metavariable: $FUNC
-          regex: (?i).*(all|every|global|unscoped).*
+          regex: (?i)^(listAll|getAll|findAll|selectAll|list_all|get_all|find_all|select_all|all$)
     - patterns:
       - pattern-either:
         - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
         - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
         - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
         - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      - metavariable-regex:
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
       # A ternary whose wide branch is a string literal picks a label or a CSS
       # class, it widens nothing. Real-capture FP: a UI filter button rendered
       # with `scope === 'all' ? 'active' : ''` (wildcard-in-markup.js).
@@ -386,16 +395,6 @@ rules:
           - pattern: $X
           - pattern-not: "'...'"
           - pattern-not: '"..."'
-    - patterns:
-      - pattern: if ($PARAM === "*") { ... }
-      - pattern-not: 'if ($PARAM === "*") { ... }
-
-          ...
-
-          $STORE.$METHOD({ ..., $KEY: $SESSION_ORG, ... })'
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
   - pattern-not-inside: 'requireAdminRole(...);
 
       ...'

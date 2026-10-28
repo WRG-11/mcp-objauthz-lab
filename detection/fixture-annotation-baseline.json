@@ -2,26 +2,10 @@
   "_comment": "Known per-annotation failures of the detection fixtures, measured 2026-10-28 with semgrep 1.182.1. A key is <fixture>|<rule>|<marked line text>. detection/check-annotations.js fails CI on any failure not listed here and on any listed entry that no longer fails. Remove an entry in the same commit that fixes it; do not add entries to make a new rule pass.",
   "missed": [
     "client-supplied-scope-overrides-session.go|mcp-client-supplied-scope-overrides-session-go|return nil, SearchOut{Notes: store.SearchNotesByOrg(scope, args.Query)}, nil",
-    "csharp/wildcard-sentinel-scope-bypass.cs|mcp-wildcard-sentinel-scope-bypass-csharp|if (org_id == \"*\" || org_id == \"all\") {",
-    "java/wildcard-sentinel-scope-bypass.java|mcp-wildcard-sentinel-scope-bypass-java|if (org_id.equals(\"*\") || org_id.equals(\"all\")) {",
-    "kotlin/wildcard-sentinel-scope-bypass.kt|mcp-wildcard-sentinel-scope-bypass-kotlin|if (org_id == \"*\" || org_id == \"all\") {",
-    "kotlin/wildcard-sentinel-scope-bypass.kt|mcp-wildcard-sentinel-scope-bypass-kotlin|return when (org_id) {",
-    "php/wildcard-sentinel-scope-bypass.php|mcp-wildcard-sentinel-scope-bypass-php|if ($org_id === \"*\" || $org_id === \"all\") {",
-    "ruby/wildcard-sentinel-scope-bypass.rb|mcp-wildcard-sentinel-scope-bypass-ruby|if org_id == \"*\"",
-    "ruby/wildcard-sentinel-scope-bypass.rb|mcp-wildcard-sentinel-scope-bypass-ruby|if org_id == \"*\" || org_id == \"all\"",
-    "swift/wildcard-sentinel-scope-bypass.swift|mcp-wildcard-sentinel-scope-bypass-swift|if org_id == \"*\" || org_id == \"all\" {",
-    "wildcard-sentinel-scope-bypass.js|mcp-wildcard-sentinel-scope-bypass|if (org_id === \"*\" || org_id === \"all\") {",
-    "wildcard-sentinel-scope-bypass.js|mcp-wildcard-sentinel-scope-bypass|if (org_id === \"*\") {",
-    "wildcard-sentinel-scope-bypass.py|mcp-wildcard-sentinel-scope-bypass|if org_id == \"*\" or org_id == \"all\":",
     "xff-for-ratelimit.js|mcp-ratelimit-scope-from-forwarded-header|const quotaKey = extra.requestInfo.headers[\"x-forwarded-for\"] ?? session.userId;"
   ],
   "okFired": [
     "batch-resolve-missing-per-item-scope-filter.js|mcp-batch-resolve-missing-per-item-scope-filter|const resolved = ids.map(id => store.getNote(id)).filter(Boolean);",
-    "batch-resolve-missing-per-item-scope-filter.js|mcp-batch-resolve-missing-per-item-scope-filter|const resolved = ids.map(id => store.getNote(id)).filter(Boolean);",
-    "csharp/wildcard-sentinel-scope-bypass.cs|mcp-wildcard-sentinel-scope-bypass-csharp|if (scope == \"*\") {",
-    "java/wildcard-sentinel-scope-bypass.java|mcp-wildcard-sentinel-scope-bypass-java|if (scope.equals(\"*\")) {",
-    "php/wildcard-sentinel-scope-bypass.php|mcp-wildcard-sentinel-scope-bypass-php|if ($scope === \"*\") {",
-    "ruby/wildcard-sentinel-scope-bypass.rb|mcp-wildcard-sentinel-scope-bypass-ruby|logger.info(\"wildcard scope requested\") if scope == \"*\"",
-    "swift/wildcard-sentinel-scope-bypass.swift|mcp-wildcard-sentinel-scope-bypass-swift|if scope == \"*\" {"
+    "batch-resolve-missing-per-item-scope-filter.js|mcp-batch-resolve-missing-per-item-scope-filter|const resolved = ids.map(id => store.getNote(id)).filter(Boolean);"
   ]
 }

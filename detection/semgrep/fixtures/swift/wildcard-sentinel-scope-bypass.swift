@@ -79,6 +79,87 @@ func logScopeValue(_ scope: String, req: Request) {
     }
 }
 
+// FIRE: the "all" spelling alone.
+func vulnExportAll(req: Request, token: String, tenant: String) async throws -> [Note] {
+    let session = try resolveSession(req: req, token: token)
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-swift
+    if tenant == "all" {
+        return try await Note.query(on: req.db).all()
+    }
+    return try await Note.query(on: req.db).filter(\.$orgId == session.orgId).all()
+}
+
+// FIRE: the "all" spelling of the ternary.
+func vulnExportTernaryAll(req: Request, token: String, tenant: String) async throws -> [Note] {
+    let session = try resolveSession(req: req, token: token)
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-swift
+    return tenant == "all"
+        ? try await Note.query(on: req.db).all()
+        : try await Note.query(on: req.db).filter(\.$orgId == session.orgId).all()
+}
+
+// TODO: the Swift parser groups `a == "*" || flag` as `a == ("*" || flag)`,
+// so the comparison is not a subexpression and the rule does not see it.
+// Only the last comparison of a `||` chain is reliably found.
+func vulnExportVerbose(req: Request, token: String, org_id: String, verbose: Bool) async throws -> [Note] {
+    let session = try resolveSession(req: req, token: token)
+    // todoruleid: mcp-wildcard-sentinel-scope-bypass-swift
+    if org_id == "*" || verbose {
+        return try await Note.query(on: req.db).all()
+    }
+    return try await Note.query(on: req.db).filter(\.$orgId == session.orgId).all()
+}
+
+// OK: the wildcard branch still filters by the session's org. Pins the
+// filterless-query receiver filter.
+func exportOwnOrg(req: Request, token: String, org_id: String) async throws -> [Note] {
+    let session = try resolveSession(req: req, token: token)
+    // ok: mcp-wildcard-sentinel-scope-bypass-swift
+    if org_id == "*" {
+        return try await Note.query(on: req.db).filter(\.$orgId == session.orgId).all()
+    }
+    return []
+}
+
+// OK: guarded by checkAdminRole. Pins that guard.
+func fixedExportChecked(req: Request, token: String, org_id: String) async throws -> [Note] {
+    let session = try resolveSession(req: req, token: token)
+    try checkAdminRole(req: req, session: session)
+    // ok: mcp-wildcard-sentinel-scope-bypass-swift
+    if org_id == "*" {
+        return try await Note.query(on: req.db).all()
+    }
+    return []
+}
+
+// OK: guarded by assertAdminRole. Pins that guard.
+func fixedExportAsserted(req: Request, token: String, org_id: String) async throws -> [Note] {
+    let session = try resolveSession(req: req, token: token)
+    try assertAdminRole(req: req, session: session)
+    // ok: mcp-wildcard-sentinel-scope-bypass-swift
+    if org_id == "*" {
+        return try await Note.query(on: req.db).all()
+    }
+    return []
+}
+
+// OK: "all" on an export format, not a scope. Pins the parameter-name regex
+// of both forms.
+func exportFields(req: Request, format: String) async throws -> [Field] {
+    // ok: mcp-wildcard-sentinel-scope-bypass-swift
+    if format == "all" {
+        return try await Field.query(on: req.db).all()
+    }
+    // ok: mcp-wildcard-sentinel-scope-bypass-swift
+    return format == "*" ? try await Field.query(on: req.db).all() : []
+}
+
+// OK: a ternary that picks a CSS class. Pins the string-literal exclusion.
+func filterButtonClass(scope: String) -> String {
+    // ok: mcp-wildcard-sentinel-scope-bypass-swift
+    return scope == "all" ? "active" : ""
+}
+
 struct Session { let orgId: String }
 final class Note: Model, @unchecked Sendable {
     static let schema = "notes"

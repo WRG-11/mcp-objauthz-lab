@@ -53,28 +53,62 @@ rules:
   - ruby
   severity: ERROR
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit require_admin_role-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  # The earlier version matched the comparison and then required the same
+  # range to be a whole `if $PARAM == "*" ... end`. A comparison is never a
+  # whole `if`, so `a || b` and a body of `Note.all` without parentheses
+  # never fired, any call counted (a modifier `logger.info(...) if ...`
+  # fired), and there was no admin-role guard. The `if` form now reports the
+  # whole statement, searches its condition, and requires a list-all call on
+  # a model class in its body (`Note.all`).
   patterns:
   - pattern-either:
-      - pattern: $PARAM == "*"
-      - pattern: $PARAM == "all"
-  - metavariable-regex:
-      metavariable: $PARAM
-      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-  - pattern-either:
+    - patterns:
       - pattern: |
-          if $PARAM == "*"
-            ...
-            $MODEL.$METHOD(...)
+          if $COND
             ...
           end
+      - metavariable-pattern:
+          metavariable: $COND
+          patterns:
+          - pattern-either:
+            - pattern: $PARAM == "*"
+            - pattern: $PARAM == "all"
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
       - pattern: |
-          if $PARAM == "all"
+          if $COND
             ...
-            $MODEL.$METHOD(...)
+            <... $MODEL.$METHOD ...>
             ...
           end
-      - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
-      - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      - metavariable-regex:
+          metavariable: $MODEL
+          regex: ^[A-Z][A-Za-z0-9_]*$
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(all|find_each|unscoped)$
+    - patterns:
+      - pattern-either:
+        - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      - metavariable-regex:
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      - metavariable-pattern:
+          metavariable: $WIDE
+          patterns:
+          - pattern: $X
+          - pattern-not: '"..."'
+  - pattern-not-inside: |
+      require_admin_role(...)
+      ...
+  - pattern-not-inside: |
+      check_admin_role(...)
+      ...
+  - pattern-not-inside: |
+      assert_admin_role(...)
+      ...
   metadata:
     cwe:
     - CWE-639

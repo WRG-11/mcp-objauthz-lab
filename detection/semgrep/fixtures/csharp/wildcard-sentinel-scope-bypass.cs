@@ -55,6 +55,99 @@ public async Task<IEnumerable<Note>> FixedExportGuarded(string token, string org
     return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
 }
 
+// FIRE: the "all" spelling alone, widening through a list-all repository call.
+public async Task<IEnumerable<Note>> VulnExportAll(string token, string tenant) {
+    var session = ResolveSession(token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-csharp
+    if (tenant == "all") {
+        return await _notes.GetAllAsync();
+    }
+    return await _notes.ListByOrgAsync(session.OrgId);
+}
+
+// FIRE: the literal-first spellings.
+public async Task<IEnumerable<Note>> VulnExportLiteralFirst(string token, string org_id) {
+    var session = ResolveSession(token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-csharp
+    if ("*" == org_id) {
+        return _repo.Notes.ToList();
+    }
+    return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
+}
+
+public async Task<IEnumerable<Note>> VulnExportLiteralFirstAll(string token, string org_id) {
+    var session = ResolveSession(token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-csharp
+    if ("all" == org_id) {
+        return await _repo.Notes.ToArrayAsync();
+    }
+    return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
+}
+
+// FIRE: the "all" spelling of the ternary.
+public async Task<IEnumerable<Note>> VulnExportTernaryAll(string token, string tenant) {
+    var session = ResolveSession(token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-csharp
+    return tenant == "all" ? _repo.Notes.ToArray() : await _notes.ListByOrgAsync(session.OrgId);
+}
+
+// OK: the body narrows by org before loading. Pins the whole-table load shape.
+public async Task<IEnumerable<Note>> ExportOwnOrg(string token, string org_id) {
+    var session = ResolveSession(token);
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    if (org_id == "*") {
+        return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
+    }
+    return new List<Note>();
+}
+
+// OK: "*" clears a cache; it reads nothing. Pins the load-method regex.
+public void InvalidateCache(string scope) {
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    if (scope == "*") {
+        _cache.Notes.Clear();
+    }
+}
+
+// OK: guarded by CheckAdminRole. Pins that guard.
+public async Task<IEnumerable<Note>> FixedExportChecked(string token, string org_id) {
+    var session = ResolveSession(token);
+    CheckAdminRole(session);
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    if (org_id == "*") {
+        return await _repo.Notes.ToListAsync();
+    }
+    return new List<Note>();
+}
+
+// OK: guarded by AssertAdminRole. Pins that guard.
+public async Task<IEnumerable<Note>> FixedExportAsserted(string token, string org_id) {
+    var session = ResolveSession(token);
+    AssertAdminRole(session);
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    if (org_id == "*") {
+        return await _repo.Notes.ToListAsync();
+    }
+    return new List<Note>();
+}
+
+// OK: "all" on an export format, not a scope. Pins the parameter-name regex
+// of both forms.
+public async Task<IEnumerable<Field>> ExportFields(string format) {
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    if (format == "all") {
+        return await _fields.GetAllAsync();
+    }
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    return format == "*" ? _repo.Fields.ToList() : _repo.DefaultFields.ToList();
+}
+
+// OK: a ternary that picks a CSS class. Pins the string-literal exclusion.
+public string FilterButtonClass(string scope) {
+    // ok: mcp-wildcard-sentinel-scope-bypass-csharp
+    return scope == "all" ? "active" : "";
+}
+
 // SILENT: wildcard in markup rendering (textual, not authz)
 // The parameter name matches scope regex but context is markup, not authz
 public string RenderMarkdown(string text) {

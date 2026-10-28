@@ -86,6 +86,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- The seven `mcp-wildcard-sentinel-scope-bypass` rules (JavaScript/TypeScript/
+  Python, Java, C#, Kotlin, PHP, Ruby, Swift) never fired on the `if` form,
+  which is the form most of their fixture cases use. Each rule matched the
+  `"*"`/`"all"` comparison as one range and the widening call (or a whole
+  `if` built around the bare comparison) as another; the two never overlap,
+  so `if (a === "*" || a === "all")` was always missed, while in several
+  languages any call in the body counted and a logging call fired. The `if`
+  form now reports the whole statement: its condition is searched for the
+  comparison on a scope-named parameter, and its body must widen the read (a
+  list-all call, a whole-table load such as `Note.all`, `Note::all()`,
+  `db.Notes.ToListAsync()` or a filterless Fluent query). The ternary form
+  keeps its string-literal exclusion. `requireAdminRole`, `checkAdminRole`
+  and `assertAdminRole` (in each language's spelling) now silence the rule in
+  every language; before, only JavaScript had them. Kotlin also gains the
+  `when` form, which could never fire before (it matches a two-branch `when`
+  only, because Kotlin patterns accept no `...` between branches). One parser
+  limit is marked rather than hidden: in Swift `a == "*" || b` parses as
+  `a == ("*" || b)`, so only the last comparison of a `||` chain is found
+  (`todoruleid`). Each fixture gained a positive per comparison form and a
+  neighbor per guard; every guard fails its fixture when removed (107
+  mutants across the seven rules). Fixture findings 179 -> 211; the
+  annotation baseline drops 11 missed and 5 wrongly fired entries.
 - `mcp-unscoped-query-object-fetch-swift` matched nothing: it had no Fluent
   shape (`find($ID)` with one argument, where Fluent's is `find(id, on: db)`,
   and `query(\.id == ...)`, which is not Fluent syntax). It is now a taint
