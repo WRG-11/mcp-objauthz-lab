@@ -88,25 +88,47 @@ rules:
   - ruby
   severity: WARNING
   message: An object is fetched by id through a query that carries no tenant key (workspace_id / org_id / tenant_id / project_id ...), or fetched straight by primary key. If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+  # The id comes from the caller: either a Rails `params[...]` value, or a
+  # parameter of the enclosing method (an MCP tool's `def call(id:)`; the
+  # pattern matches positional and keyword parameters alike). The earlier
+  # version only knew `params[...]`, so it matched nothing in its fixture.
+  # An id from the server (`current_user.note_id`) is not S7.
+  #
+  # `find_by(id: $ID)` matches a one-key hash only, so a lookup that also binds
+  # a tenant column (`find_by(id: id, org_id: org)`) stays silent. A chain such
+  # as `Note.where(org_id: org).find(id)` or `current_company.notes.find(id)`
+  # is not a bare model constant and stays silent through the $MODEL filter.
+  # (A tenant-key pattern-not here was measured redundant and removed.)
+  #
+  # A background job's `perform(id)` gets its id from the server code that
+  # enqueued it; the authorization check belongs at that enqueue site, which
+  # this rule reaches through its own branches. `File.delete(path)` and
+  # `Dir.delete(path)` are filesystem calls, not record lookups.
   patterns:
   - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          def $M(..., $ID, ...)
+            ...
+          end
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(?!perform$)
+      - pattern-either:
+        - pattern: $MODEL.find($ID)
+        - pattern: '$MODEL.find_by(id: $ID)'
+        - pattern: '$MODEL.find_by!(id: $ID)'
+        - pattern: '$MODEL.where(id: $ID).first'
+        - pattern: $MODEL.delete($ID)
+    - pattern-either:
       - pattern: $MODEL.find(params[:$K])
       - pattern: '$MODEL.find_by(id: params[:$K])'
       - pattern: '$MODEL.find_by!(id: params[:$K])'
       - pattern: '$MODEL.where(id: params[:$K]).first'
       - pattern: $MODEL.delete(params[:$K])
-  - pattern-not:
-      patterns:
-        - pattern-either:
-            - pattern: '$MODEL.where(..., $TENANT_KEY => $TENANT_VAL, ...).find(params[:$K])'
-            - pattern: '$MODEL.find_by(id: params[:$K], $TENANT_KEY => $TENANT_VAL)'
-            - pattern: '$MODEL.find_by!(id: params[:$K], $TENANT_KEY => $TENANT_VAL)'
-        - metavariable-regex:
-            metavariable: $TENANT_KEY
-            regex: (?i)^(company_id|org_id|tenant_id|workspace_id|project_id|account_id|user_id|owner_id)$
   - metavariable-regex:
       metavariable: $MODEL
-      regex: ^[A-Z][A-Za-z0-9_]*$
+      regex: ^(?!(File|Dir)$)[A-Z][A-Za-z0-9_]*$
   metadata:
     cwe:
     - CWE-639

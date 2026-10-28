@@ -86,6 +86,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-unscoped-query-object-fetch-ruby` only matched an id taken from
+  `params[...]`, while every case in its fixture took the id as a method
+  parameter, so it matched nothing there. It now also matches an id that is a
+  parameter of the enclosing method (positional or keyword, as in an MCP
+  tool's `def call(id:)`), and stays silent on an id read from the server
+  side. A tenant-key exclusion that was measured redundant (a one-key
+  `find_by(id: ...)` hash already leaves out a lookup that binds a tenant
+  column) was removed. Measured on 16 public Ruby repositories, the
+  parameter branch first fired 103 times, 66 of them inside a background
+  job's `perform(id)` (the id comes from the server code that enqueued the
+  job, and the check belongs there) and one on `File.delete(path)`; both are
+  now excluded, which brings the parameter branch to 36. The fixture gained a
+  positive per fetch shape and four neighbors; removing any one guard makes it
+  fail.
 - `mcp-unscoped-query-object-fetch-kotlin` matched nothing, for the same
   reason as the C# rule: a `$REPO` filter on the whole rule, which was also
   case-sensitive (`.*Dao` did not match `dao`). The repository branch now
