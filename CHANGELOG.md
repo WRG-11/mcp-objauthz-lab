@@ -61,6 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fixture gained a subscript-read positive, a keyword-argument positive, and
   legitimate neighbors for every guard; quota calls are left to
   `mcp-ratelimit-scope-from-forwarded-header-py`.
+- `mcp-authz-scope-from-request-header-java` matched nothing. It compared the
+  header name without the quotes that semgrep keeps on a string literal,
+  referenced `$HDRVAL` and `$KEY` that no pattern bound, and required the header
+  read and the scoping call to match one range. It is now a taint rule from
+  `getHeader(...)`, `getHeaders().getFirst(...)` and `@RequestHeader`
+  parameters (all three annotation spellings) to a scoping call with at least
+  one argument; header accessors and quota calls are skipped. The fixture
+  gained three positives and four neighbors; removing any one guard makes it
+  fail.
 - `mcp-batch-resolve-missing-per-item-scope-filter-py` matched only an
   assignment (`x = [store.get_x(i) for i in ids]`), so a handler that returns
   the comprehension directly, the shape of its own positive fixture, was never
