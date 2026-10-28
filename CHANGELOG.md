@@ -61,6 +61,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fixture gained a subscript-read positive, a keyword-argument positive, and
   legitimate neighbors for every guard; quota calls are left to
   `mcp-ratelimit-scope-from-forwarded-header-py`.
+- `mcp-batch-resolve-missing-per-item-scope-filter-py` matched only an
+  assignment (`x = [store.get_x(i) for i in ids]`), so a handler that returns
+  the comprehension directly, the shape of its own positive fixture, was never
+  reported. Measured on 22 real repositories, the old rule still reported 7
+  assignments there, all reviewed as false positives: 5 were plain imported
+  functions (semgrep resolves `from m import get_x` to `m.get_x`, so they
+  matched `$STORE.$METHOD`) and 2 iterated ids the server had derived itself.
+  The rule now matches the comprehension itself, requires a method call in the
+  source text, and requires ids that come from a handler parameter or a field
+  of one (`args.ids`). It still skips a comprehension that is filtered per item
+  afterwards or in an enclosing comprehension. On the same repositories it
+  reports 1 of those 7 places, and it fires on its own positives. New fixtures
+  cover each guard.
 - `detection/README.md` said every rule fires on its vulnerable fixture and stays
   silent on the fixed one. Measured with semgrep 1.182.1, 13 of 45 rules fire
   nowhere in their own fixtures and 5 more fire on fewer lines than marked

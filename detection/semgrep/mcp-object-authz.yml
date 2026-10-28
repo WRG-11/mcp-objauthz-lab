@@ -583,21 +583,47 @@ rules:
     CWE-862). Filter resolved items by the session''s scope before returning them. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
 
     '
+  # The comprehension itself is the match. An earlier version matched only
+  # `x = [...]`, so a handler that returns the comprehension directly (the
+  # fixture's positive) was never reported, and the rule fired nowhere.
   patterns:
-  - pattern: $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+  # The ids are client-supplied: a parameter of the handler, or a field of
+  # one (`args.ids`). Ids the server derived itself are not this case.
+  # (A `def` pattern also matches `async def`.)
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          def $FUNC(..., $IDS, ...):
+            ...
+      - pattern: '[$CALL for $F in $IDS]'
+    - patterns:
+      - pattern-inside: |
+          def $FUNC(..., $P, ...):
+            ...
+      - pattern: '[$CALL for $F in $P.$FIELD]'
+  - metavariable-pattern:
+      metavariable: $CALL
+      patterns:
+      - pattern: $STORE.$METHOD($F)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i)^(get|find)[A-Za-z0-9_]+$
+      - metavariable-regex:
+          metavariable: $STORE
+          regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+  # Semgrep resolves an imported function (`from m import get_x`) to `m.get_x`,
+  # so a plain function call also matches `$STORE.$METHOD`. Require a dot in
+  # the source text of the callee.
   - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(get|find)[A-Za-z0-9_]+$
-  - metavariable-regex:
-      metavariable: $STORE
-      regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
-  - pattern-not-inside: '$RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
-
+      metavariable: $CALL
+      regex: ^[^(]*\.
+  # A per-item scope filter after the batch fetch: assigned then filtered,
+  # or filtered in an enclosing comprehension.
+  - pattern-not-inside: |
+      $RESOLVED = [$X for $Y in $Z]
       ...
-
       [$N for $N in $RESOLVED if ...]
-
-      '
+  - pattern-not-inside: '[$N for $N in [$X for $Y in $Z] if ...]'
   metadata:
     cwe:
     - CWE-862
