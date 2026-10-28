@@ -4,25 +4,38 @@ rules:
   - kotlin
   severity: WARNING
   message: A Ktor/Spring MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to a repository list call, binds it as orgId in a query). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-      - pattern: $CALL.request.header($HDR)
-      - pattern: $CALL.request.headers[$HDR]
-      - pattern: val $HDRVAL = $CALL.request.header($HDR)
-      - pattern: val $HDRVAL = $CALL.request.headers[$HDR]
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern-either:
-      - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
-      - pattern: $TRANSPORT_MANAGER.getTransport($HDRVAL)
-      - pattern: $SESSION_MANAGER.getSession($HDRVAL)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(list|find|get|search|query|select).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  # Taint mode: the header read and the scoping call are separate statements.
+  # The earlier version put both under one `patterns` (which must match the
+  # same range), compared header names without their quotes, and referenced
+  # $KEY that no pattern bound, so it matched nothing.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $C.request.header($HDR)
+      - pattern: $C.request.headers[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  # A Spring @RequestHeader parameter is the header value itself.
+  - patterns:
+    - pattern-inside: |
+        fun $FUNC(..., @RequestHeader($HDR) $P: $T, ...) { ... }
+    - pattern: $P
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  pattern-sinks:
+  # The scoping call is the sink; named arguments (`orgId = v`) travel inside
+  # it. Quota and rate-limit calls are S11.
+  - patterns:
+    - pattern-either:
+      - pattern: $REPO.$METHOD(..., $ARG, ...)
+      # Semgrep's Kotlin parser does not match a named argument with $ARG.
+      - pattern: $REPO.$METHOD(..., $NAME = $ARG, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
   metadata:
     cwe:
     - CWE-639

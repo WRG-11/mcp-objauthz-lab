@@ -86,6 +86,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a client-chosen scope and is outside the rule's own header list, so it is
   now an `ok:` neighbor. The fixture gained two positives and five neighbors;
   removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-kotlin` matched nothing, for the same
+  reasons. It is now a taint rule from `call.request.header(...)`,
+  `call.request.headers[...]` and Spring `@RequestHeader` parameters to a
+  list/find/get/search/query/select call, positional or named argument, with
+  quota and rate-limit calls excluded. Two fixture cases were marked as
+  findings although the rule never covered them: an `Mcp-Session-Id` transport
+  lookup (a server-issued session handle) and a checked bearer token. They are
+  now `ok:` neighbors. The fixture gained one positive and four neighbors;
+  removing any one guard makes it fail.
 - `mcp-authz-scope-from-request-header-csharp` matched nothing, for the same
   reasons. It is now a taint rule from `Headers[...]`, the `out` variable of
   `Headers.TryGetValue(...)` and `[FromHeader]` parameters to a LINQ comparison
