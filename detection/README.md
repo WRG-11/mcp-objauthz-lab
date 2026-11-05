@@ -13,7 +13,7 @@ code, not just this lab's.
 scenarios. Twelve of the twenty-one run against **Python as well as
 JavaScript/TypeScript**: three shared rules declare both, and nine `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **45 rules across the `detection/semgrep/` directory** — the table lists all of them:
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each). Five additional input-to-sink rules cover file paths, dynamic code execution, and outgoing URLs, for **50 rules across the `detection/semgrep/` directory**. The table lists all of them:
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
@@ -62,6 +62,11 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-authz-scope-from-request-header-swift` | S10 (Swift) | header read via `req.headers["X-Org-Id"]` / `.first` and used to select tenant scope; **WARNING** |
 | `mcp-wildcard-sentinel-scope-bypass-swift` | S4 (Swift) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
 | `mcp-unscoped-query-object-fetch-swift` | S7 (Swift) | `find(id)` / `query(\.id == id).first()` with no tenant key; **WARNING** |
+| `mcp-client-path-file-read-js` | CWE-22 (JS/TS) | a caller-named path is resolved and read without a containing-directory check; **WARNING, review the path's origin** |
+| `mcp-client-id-path-write-py` | CWE-22 (Python) | a caller-named identifier reaches a filesystem write path; **WARNING** |
+| `mcp-dynamic-code-exec-py` | CWE-94 (Python) | a source-code variable reaches `exec` or `eval`; **WARNING** |
+| `mcp-caller-url-http-request-py` | CWE-918 (Python) | a caller-named URL component reaches an HTTP request; **WARNING** |
+| `mcp-scheme-only-url-validation-go` | CWE-918 (Go) | a URL validator accepts HTTP(S) based on scheme alone; **WARNING, inspect destination and redirect checks** |
 
 ### Go pack
 

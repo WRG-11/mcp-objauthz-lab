@@ -152,11 +152,12 @@ would have no coverage at all.
 
 ## Detection rules
 
-[`detection/`](detection/README.md) ships 45 [Semgrep](https://semgrep.dev)
+[`detection/`](detection/README.md) ships 50 [Semgrep](https://semgrep.dev)
 rules that flag these patterns in your own MCP server source, not just this
 lab's. There is one per code shape above, with Python siblings where the
 JavaScript spelling cannot parse as Python, plus Go, Rust, Kotlin, Java, Ruby, PHP, C#,
-and Swift language packs. Eleven of them run against Python as well as
+and Swift language packs. Five additional rules cover file paths, dynamic code
+execution, and outbound requests. Eleven of the object-authz rules run against Python as well as
 JavaScript/TypeScript, which matters because the reference MCP SDKs ship in both.
 
 Measured against this lab's own source on 2026-10-28, the rules report a line in the
@@ -164,9 +165,10 @@ handlers of 9 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10, S11, S13). The o
 four have their fix written in the same handler behind a runtime toggle, which the
 rules deliberately read as present.
 An earlier count listed S1 as flagged; that finding was on `note_get`, a correctly
-authorized handler, and is fixed. Against the official `@modelcontextprotocol/sdk` the ruleset
-produces zero findings, measured with a planted canary that proves the scan reached
-the tree. The per-scenario breakdown is in [`detection/README.md`](detection/README.md)
+authorized handler, and is fixed. The 45-rule revision measured on 2026-10-28
+produced zero findings against the official `@modelcontextprotocol/sdk`, with a
+planted canary proving the scan reached the tree. The five new rules require a
+new two-way scan before making the same claim. The per-scenario breakdown is in [`detection/README.md`](detection/README.md)
 and the measurement notes are in [`docs/detection-notes.md`](docs/detection-notes.md).
 
 Drop it into your own MCP server's CI as a GitHub Action. Findings upload to
@@ -185,7 +187,7 @@ steps:
 
 ## Audit a whole MCP server
 
-The rules look at one bug class. [`skills/mcp-audit/`](skills/mcp-audit/README.md)
+Object-level authorization remains the ruleset's main focus. [`skills/mcp-audit/`](skills/mcp-audit/README.md)
 is a [Claude Code skill](https://code.claude.com/docs/en/skills) that reviews the
 rest of a server's tool surface as well: how each tool describes itself, whether
 result shapes and errors agree across tools, which tools have tests, which look
