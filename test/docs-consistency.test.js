@@ -169,7 +169,7 @@ test("detection README lists every rule id in the ruleset", () => {
   // The prose count is a claim like any other, and it drifted: the table
   // listed all 46 while the sentence above it still said 40, because nothing
   // held it. It is held now.
-  const claim = doc.match(/\*\*(\d+) rules across the `detection\/semgrep\/` directory\*\*/);
+  const claim = doc.match(/(\d+) rules across the `detection\/semgrep\/` directory/);
   assert.ok(claim, "detection/README.md no longer states a rule count in the expected form");
   assert.strictEqual(
     Number(claim[1]),
