@@ -114,7 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     ternary between the read and the counter) was missed too. It is now a
     taint rule: a client-identity header read is the source, a quota or
     rate-limit call the sink, and it reports the call. The fixture gained one
-    case per header spelling and flow, a copy of the S11 flow, and a neighbor
+    case for each header spelling and flow. It includes the S11 flow and a neighbor
     for each name filter (5 mutants, all killed); before, 4 of its 12 cases
     fired. The quota lookup in the header-scope fixture, which that fixture
     already said belongs to this rule, is now marked for it.
@@ -190,7 +190,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`Event::find(['timestamp' => ...])`) stay silent. A tenant-key exclusion
   that no single-key sink could reach was removed. The fixture annotation for
   the Contao case sat one line above its finding and was moved; the
-  ProcessWire `findPages($input)` case passes a selector, not an id, and is
+  ProcessWire `findPages($input)` case passes a selector rather than an id; it is
   now `todoruleid`. Measured on 24 public PHP repositories, the rule fires 6
   times; 5 are a repository fetch by id in MCP ability handlers, and 1 is a
   criteria array that gains a key through `$args['k'] = $v` after it is
