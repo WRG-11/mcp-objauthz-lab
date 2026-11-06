@@ -19,20 +19,23 @@
 using Microsoft.AspNetCore.Http;
 using System.Threading.Tasks;
 
+// The rule is a taint rule, so a finding sits on the SINK: the value that
+// selects the scope in a query. `ruleid:` markers are above that query.
+
 // FIRE: Request.Headers["X-Forwarded-For"] / .TryGetValue(ApiKeyHeaderName, ...) used to authenticate/scope
 public async Task<IEnumerable<Note>> NoteGetScopedVuln(HttpRequest request, string token) {
     var session = ResolveSession(token);
-    // ruleid: mcp-authz-scope-from-request-header-csharp
     var headerOrg = request.Headers["x-org-id"].FirstOrDefault() ?? session.OrgId;
+    // ruleid: mcp-authz-scope-from-request-header-csharp
     return await _repo.Notes.Where(n => n.OrgId == headerOrg).ToListAsync();
 }
 
 // FIRE: TryGetValue with authz decision
 public async Task<IEnumerable<Note>> NoteGetScopedTryGetValueVuln(HttpRequest request, string token) {
     var session = ResolveSession(token);
-    // ruleid: mcp-authz-scope-from-request-header-csharp
     if (request.Headers.TryGetValue("X-Org-Id", out var headerOrgVal)) {
         var headerOrg = headerOrgVal.FirstOrDefault();
+        // ruleid: mcp-authz-scope-from-request-header-csharp
         return await _repo.Notes.Where(n => n.OrgId == headerOrg).ToListAsync();
     }
     return await _repo.Notes.Where(n => n.OrgId == session.OrgId).ToListAsync();
@@ -41,16 +44,16 @@ public async Task<IEnumerable<Note>> NoteGetScopedTryGetValueVuln(HttpRequest re
 // FIRE (IP-scoping variant): X-Forwarded-For used to select client IP scope
 public async Task<IEnumerable<Note>> NoteGetScopedByIpVuln(HttpRequest request, string token) {
     var session = ResolveSession(token);
-    // ruleid: mcp-authz-scope-from-request-header-csharp
     var fwd = request.Headers["x-forwarded-for"].FirstOrDefault() ?? session.ClientIp;
+    // ruleid: mcp-authz-scope-from-request-header-csharp
     return await _repo.Notes.Where(n => n.ClientIp == fwd).ToListAsync();
 }
 
 // FIRE: header used directly as OrgId in a query filter (authz decision)
 public async Task<Note> NoteGetByQueryVuln(HttpRequest request, string token, string id) {
     var session = ResolveSession(token);
-    // ruleid: mcp-authz-scope-from-request-header-csharp
     var headerOrg = request.Headers["x-org-id"].FirstOrDefault() ?? session.OrgId;
+    // ruleid: mcp-authz-scope-from-request-header-csharp
     return await _repo.Notes.FirstOrDefaultAsync(n => n.Id == id && n.OrgId == headerOrg);
 }
 
@@ -97,6 +100,65 @@ public void LogTracing(HttpRequest request) {
     var ua = request.Headers["User-Agent"].FirstOrDefault();
     var corr = request.Headers["X-Correlation-ID"].FirstOrDefault();
     _logger.LogInformation("ua={UA} corr={Corr}", ua, corr);
+}
+
+// FIRE: [FromHeader] parameter, comparison written value-first.
+public async Task<IEnumerable<Project>> ProjectListVuln([FromHeader(Name = "X-Tenant-Id")] string tenant) {
+    // ruleid: mcp-authz-scope-from-request-header-csharp
+    return await _repo.Projects.Where(p => tenant == p.TenantId).ToListAsync();
+}
+
+// FIRE: finder keyed by the header value.
+public async Task<Account> AccountShowVuln(HttpRequest request) {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
+    // ruleid: mcp-authz-scope-from-request-header-csharp
+    return await _repo.Accounts.FindAsync(request.Headers["x-account-id"].FirstOrDefault());
+}
+
+// OK (legitimate neighbor): a correlation header as a finder key is not a
+// scope header. Pins the header-name regex of the indexer source.
+public async Task<AuditEvent> AuditShow(HttpRequest request) {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
+    // ok: mcp-authz-scope-from-request-header-csharp
+    return await _repo.AuditEvents.FindAsync(request.Headers["x-request-id"].FirstOrDefault());
+}
+
+// OK: the same through TryGetValue. Pins its header-name regex.
+public async Task<AuditEvent> AuditShowTry(HttpRequest request) {
+    if (request.Headers.TryGetValue("X-Request-Id", out var reqId)) {
+        // The finder has no tenant key either, but the S7 rule only follows ids
+        // that come from a parameter, not the `out` variable of TryGetValue.
+        // todoruleid: mcp-unscoped-query-object-fetch-csharp
+        // ok: mcp-authz-scope-from-request-header-csharp
+        return await _repo.AuditEvents.FindAsync(reqId.FirstOrDefault());
+    }
+    return null;
+}
+
+// OK: the same through [FromHeader]. Pins its header-name regex.
+public async Task<AuditEvent> AuditShowFromHeader([FromHeader(Name = "X-Request-Id")] string reqId) {
+    // The finder also has no tenant key, so the S7 rule fires as well.
+    // ruleid: mcp-unscoped-query-object-fetch-csharp
+    // ok: mcp-authz-scope-from-request-header-csharp
+    return await _repo.AuditEvents.FindAsync(reqId);
+}
+
+// OK: the header narrows a non-scope property inside the session's org. Pins
+// the scope-property regex.
+public async Task<IEnumerable<Event>> ListEventsFromIp(HttpRequest request, string token) {
+    var session = ResolveSession(token);
+    var clientIp = request.Headers["x-forwarded-for"].FirstOrDefault();
+    // ok: mcp-authz-scope-from-request-header-csharp
+    return await _repo.Events.Where(e => e.OrgId == session.OrgId && e.SourceIp == clientIp).ToListAsync();
+}
+
+// OK: the header value is written, not used to choose whose rows are read.
+// Pins the finder-method regex.
+public void RecordAccess(HttpRequest request) {
+    // ok: mcp-authz-scope-from-request-header-csharp
+    _repo.AccessLog.Add(request.Headers["x-forwarded-for"].FirstOrDefault());
 }
 
 class Session { public string OrgId { get; set; } = ""; public string ClientIp { get; set; } = ""; }

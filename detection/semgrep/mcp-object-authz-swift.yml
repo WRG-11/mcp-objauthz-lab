@@ -4,17 +4,31 @@ rules:
   - swift
   severity: WARNING
   message: A Vapor/SwiftNIO MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to a Fluent query, binds it as orgId in a filter). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-    - pattern: $REQ.headers[$HDR]
-    - pattern: $REQ.headers[$HDR].first
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(filter|query|find|all|first|get).*
+  # Taint mode: the header read and the query are separate statements. The
+  # earlier version put both under one `patterns` (which must match the same
+  # range), compared header names without their quotes, and referenced
+  # $HDRVAL that no pattern bound, so it matched nothing.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $R.headers[$HDR]
+      - pattern: '$R.headers.first(name: $HDR)'
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  pattern-sinks:
+  # A Fluent filter that compares a scope key path with the value. The finding
+  # sits on the value, so a chained query reports the filter line, not the
+  # line where the chain starts. clientIp is the IP-scoping variant of S10.
+  - patterns:
+    - pattern: $Q.filter($KP == $V)
+    - metavariable-regex:
+        metavariable: $KP
+        regex: ^\\\.\$(orgId|tenantId|workspaceId|projectId|organizationId|accountId|teamId|customerId|clientIp)$
+    - focus-metavariable: $V
+  # A Fluent finder by key; the call is the sink.
+  - pattern: '$M.find($V, on: $DB)'
   metadata:
     cwe:
     - CWE-639
@@ -29,28 +43,62 @@ rules:
   - swift
   severity: ERROR
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  # The earlier version matched the comparison and then required the same
+  # range to be a whole `if $PARAM == "*" { ... }`. A comparison is never a
+  # whole `if`, so `a || b` never fired, any call in the body counted (a
+  # logging call fired), and there was no admin-role guard. The `if` form now
+  # reports the whole statement, searches its condition, and requires a
+  # Fluent query with no filter in its body (`Note.query(on: db).all()`). The
+  # parser binds a leading `try await` into the receiver, so the receiver
+  # filter allows it. The parser also groups `a == "*" || b` as
+  # `a == ("*" || b)`, so only the last comparison of a `||` chain is a
+  # subexpression the rule can find.
   patterns:
   - pattern-either:
-    - pattern: $PARAM == "*"
-    - pattern: $PARAM == "all"
-  - metavariable-regex:
-      metavariable: $PARAM
-      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-  - pattern-either:
-    - pattern: |
-        if $PARAM == "*" {
-          ...
-          $REPO.$METHOD(...)
-          ...
-        }
-    - pattern: |
-        if $PARAM == "all" {
-          ...
-          $REPO.$METHOD(...)
-          ...
-        }
-    - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+    - patterns:
+      - pattern: |
+          if $COND {
+            ...
+          }
+      - metavariable-pattern:
+          metavariable: $COND
+          patterns:
+          - pattern-either:
+            - pattern: $PARAM == "*"
+            - pattern: $PARAM == "all"
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      - pattern: |
+          if $COND {
+            ...
+            <... $Q.all() ...>
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $Q
+          regex: ^(try\s+)?(await\s+)?[A-Z][A-Za-z0-9_]*\.query\(on:[^()]*\)$
+    - patterns:
+      - pattern-either:
+        - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      - metavariable-regex:
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      - metavariable-pattern:
+          metavariable: $WIDE
+          patterns:
+          - pattern: $X
+          - pattern-not: '"..."'
+  - pattern-not-inside: |
+      try requireAdminRole(...)
+      ...
+  - pattern-not-inside: |
+      try checkAdminRole(...)
+      ...
+  - pattern-not-inside: |
+      try assertAdminRole(...)
+      ...
   metadata:
     cwe:
     - CWE-639
@@ -64,15 +112,51 @@ rules:
   - swift
   severity: WARNING
   message: An object is fetched by id through a query that carries no tenant key (workspaceId / projectId / organizationId / orgId / tenantId / accountId / userId / ownerId). If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
-  patterns:
-  - pattern-either:
-    - pattern: $REPO.find($ID)
-    - pattern: $REPO.query(\.id == $ID).first()
-    - pattern: $REPO.all().filter { it.id == $ID }.first
-    - pattern: $REPO.delete($ID)
-  - metavariable-regex:
-      metavariable: $REPO
-      regex: .*Repository|.*Model|.*Controller
+  # The earlier version had no Fluent shape: `find($ID)` with one argument
+  # (Fluent's is `find(id, on: db)`), and `query(\.id == ...)` and
+  # `filter { it.id == ... }`, which are not Fluent syntax. It matched none of
+  # its fixture cases.
+  #
+  # The id must come from the caller: a parameter of the enclosing function, or
+  # a route parameter (`req.parameters.get`) in a closure route. The request is
+  # caller input, but the user it authenticated is not, so an id read through
+  # `req.auth` is a server-side value.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        func $F(..., $P: $T, ...) { ... }
+    - pattern: $P
+  - pattern: $R.parameters.get(...)
+  pattern-sanitizers:
+  - pattern: $R.auth.require(...)
+  - pattern: $R.auth.get(...)
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      # `Model.find(id, on: db)`. The class-name filter keeps out an object
+      # receiver.
+      - patterns:
+        - pattern: '$MODEL.find($ID, on: $DB)'
+        - metavariable-regex:
+            metavariable: $MODEL
+            regex: ^[A-Z][A-Za-z0-9_]*$
+      # `Model.query(on: db).filter(\.$id == id)` ending in `.first()` or
+      # `.delete()`, with the id as its only filter. A tenant filter in the
+      # chain, or a query through a parent (`user.$notes.query(on:)`), stays
+      # silent. The parser binds a leading `try await` into the receiver, so
+      # the text filter allows it.
+      - patterns:
+        - pattern-either:
+          - pattern: $X.first()
+          - pattern: $X.delete()
+        - metavariable-regex:
+            metavariable: $X
+            regex: ^(try\s+)?(await\s+)?[A-Z][A-Za-z0-9_]*\.query\(on:[^()]*\)\s*\.filter\(\\\.\$id\s*==\s*[^()]*\)$
+        - metavariable-pattern:
+            metavariable: $X
+            pattern: $Q.filter($KP == $ID)
+    - focus-metavariable: $ID
   metadata:
     cwe:
     - CWE-639

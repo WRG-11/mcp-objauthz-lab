@@ -49,3 +49,34 @@ async def fixed_read(store, token, doc_id):
     require_ownership(session, doc)
     # ok: mcp-missing-object-authz-check
     return ok(doc)
+
+
+# The check written inline instead of as a guard call, mirrored from the
+# JavaScript fixture.
+async def fixed_read_inline(store, token, doc_id):
+    session = resolve_session(store, token)
+    doc = store.get_doc(doc_id)
+    if doc is None or doc.org_id != session.org_id:
+        raise NotFound(doc_id)
+    # ok: mcp-missing-object-authz-check
+    return ok(doc)
+
+
+async def fixed_delete_inline_reversed(store, token, note_id):
+    session = resolve_session(store, token)
+    note = store.get_note(note_id)
+    if session.org_id != note.org_id:
+        raise NotFound(note_id)
+    # ok: mcp-missing-object-authz-check
+    store.delete_note(note.id)
+    return ok({"deleted": note.id})
+
+
+# VULN: two different keys, as in the JavaScript fixture.
+async def vuln_read_wrong_key(store, token, doc_id):
+    session = resolve_session(store, token)
+    doc = store.get_doc(doc_id)
+    if doc is None or doc.org_id != session.user_id:
+        raise NotFound(doc_id)
+    # ruleid: mcp-missing-object-authz-check
+    return ok(doc)

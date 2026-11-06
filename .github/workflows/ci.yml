@@ -90,7 +90,96 @@ jobs:
               process.exit(1);
             }
             const got = d.results.length;
-            const want = 78; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+            const want = 235; // 6 restored S2 fixture findings (2026-10-12, see below) + 18 JavaScript + 12 Python + 3 Go + 3 Rust + 3 S11 (JS) + 18 new languages (6×3) + 4 new S7/S10 patterns + 2 S12/S13 patterns + 1 S7 ORM-mutation-where FP fixture (deletePrismaWhereVuln) + 5 from the taint fixture (unscoped-query-taint.js): deleteVuln & fetchVuln each fire pattern+taint (=4), deleteMiddlewareLoaded fires pattern-ONLY (=1, the res.locals provenance case the taint rule correctly suppresses), deleteScoped stays silent on both by the scope key. Plus 3 from the admin-guard fixture (unscoped-query-taint-admin.js): the admin-guarded route fires pattern-ONLY (=1, the taint rule exempts an admin-only handler), the non-admin route fires pattern+taint (=2).
+                             //   2026-11-06: 230->235. Five anonymous input-to-sink rules each add one positive fixture finding.
+                             //   2026-10-28: 226->230. mcp-unscoped-query-object-fetch-py learns the
+                             //   SQLAlchemy 2.0 select(M).where(M.id == x) lookup in a route handler:
+                             //   4 positives in its fixture.
+                             //   2026-10-28: 221->226. mcp-ratelimit-scope-from-forwarded-header is a
+                             //   taint rule and reports each counter call: 11 -> 15 in its fixture
+                             //   (+1 a copy of the S11 flow of this lab), +1 the quota lookup in the
+                             //   header-scope fixture.
+                             //   2026-10-28: 219->221. mcp-missing-object-authz-check now reads an
+                             //   inline `obj.k !== session.k` check as a check; the +2 are the
+                             //   JavaScript and Python cases that compare two different keys.
+                             //   2026-10-28: 211->219. mcp-ratelimit-scope-from-forwarded-header
+                             //   only matched optional-chained header reads: +1 for the plain read
+                             //   in its fixture, +7 for one new case per statement shape and
+                             //   header spelling. The annotation baseline is now empty.
+                             //   2026-10-28: 179->211. The seven mcp-wildcard-sentinel-scope-bypass
+                             //   rules never fired on an `if`: the comparison and the widening
+                             //   call were matched as ranges that never overlap. Now the whole
+                             //   `if` is reported (+32 across the seven fixtures).
+                             //   2026-10-28: 171->179. mcp-unscoped-query-object-fetch-swift had no
+                             //   Fluent shape and matched nothing. Now taint from caller input:
+                             //   5 cases in its own fixture + 3 header-fixture finders (8).
+                             //   2026-10-28: 160->171. mcp-unscoped-query-object-fetch-php only
+                             //   fired on Contao findByPk/findBy (whole-rule $MODEL filter
+                             //   `.*Model|.*Eloquent`). Now taint from caller input: 9 cases in
+                             //   its own fixture + 2 header-fixture finders (13), was 2.
+                             //   2026-10-28: 149->160. mcp-unscoped-query-object-fetch-ruby
+                             //   only knew `params[...]` ids, so none of its 5 method-parameter
+                             //   cases fired. Now fires on those 5 + a keyword-argument tool (6)
+                             //   + one `params[...]` case per fetch shape (5).
+                             //   2026-10-28: 143->149. mcp-unscoped-query-object-fetch-kotlin
+                             //   matched nothing (same whole-rule $REPO filter, also case-
+                             //   sensitive). Now fires on its 5 existing cases + getById (6).
+                             //   2026-10-28: 132->143. mcp-unscoped-query-object-fetch-csharp
+                             //   matched nothing (a $REPO filter applied to branches that never
+                             //   bind it). It now also requires the id to come from a public
+                             //   method parameter. Fires on its 5 existing cases + sync Find, a
+                             //   repository FindAsync and a request-body id (8), and on 3 header-
+                             //   fixture finders, which also lack a tenant key and are marked (3).
+                             //   2026-10-28: 127->132. mcp-authz-scope-from-request-header-swift
+                             //   matched nothing (same defects). Now a taint rule: 3 existing
+                             //   cases + headers.first(name:) and a find-by-header fire (5).
+                             //   2026-10-28: 122->127. mcp-authz-scope-from-request-header-kotlin
+                             //   matched nothing (same defects). Now a taint rule: 4 existing
+                             //   cases + @RequestHeader fire (5). The Mcp-Session-Id and bearer
+                             //   cases were mislabelled and are now ok: neighbors.
+                             //   2026-10-28: 116->122. mcp-authz-scope-from-request-header-csharp
+                             //   matched nothing (same defects). Now a taint rule: 4 existing
+                             //   cases + [FromHeader] and a FindAsync-by-header fire (6).
+                             //   2026-10-28: 110->116. mcp-authz-scope-from-request-header-ruby
+                             //   matched nothing (same defects). Now a taint rule: 4 existing
+                             //   cases + Rack env and a find-by-header fire (6). The
+                             //   Authorization bearer case is authentication, now `ok`.
+                             //   2026-10-28: 102->110. mcp-authz-scope-from-request-header-php
+                             //   matched nothing (same defects as Java). Now a taint rule:
+                             //   5 existing cases + HeaderBag, $_SERVER and a static finder
+                             //   fire (8); neighbors stay silent.
+                             //   2026-10-28: 95->102. mcp-authz-scope-from-request-header-java
+                             //   matched nothing (header names compared without quotes,
+                             //   unbound $HDRVAL/$KEY, one `patterns` range). Now a taint
+                             //   rule: 4 existing cases + getHeader + @RequestHeader(name=)
+                             //   + @RequestHeader(value=) fire (7); neighbors stay silent.
+                             //   2026-10-28: 91->95. mcp-batch-resolve-missing-per-item-
+                             //   scope-filter-py matched only `x = [...]`, never the returned
+                             //   comprehension of its own positive. It now matches the
+                             //   comprehension over a handler parameter or a field of one:
+                             //   the direct return, assigned-but-unfiltered, a typed
+                             //   parameter and `args.ids` fire (4); filtered, nested-filter,
+                             //   cache, server-derived, session-field and imported-function
+                             //   neighbors stay silent.
+                             //   2026-10-28: 86->91. The Python sibling
+                             //   (mcp-authz-scope-from-request-header-py) had the same
+                             //   two-patterns-one-range defect and is now a taint rule too:
+                             //   3 existing cases + a subscript read + a keyword-argument
+                             //   scope. Its legitimate neighbors stay silent.
+                             //   2026-10-28: 81->86. mcp-authz-scope-from-request-header (JS)
+                             //   fired nowhere in its fixture: its header read and its
+                             //   scoping call were two positive patterns under one
+                             //   `patterns`, which must match the same range. It is now a
+                             //   taint rule reporting at the scoping argument: 3 existing
+                             //   cases + 2 new `.get` cases. The new legitimate neighbors
+                             //   (correlation header, recorded IP, non-scope query field,
+                             //   quota lookup, header org in audit/quota/trace objects)
+                             //   stay silent.
+                             //   2026-10-28: 78->81. xff-for-ratelimit.py, the first positive
+                             //   fixture for mcp-ratelimit-scope-from-forwarded-header-py: three
+                             //   header-keyed quota checks (or-fallback via .get, or-fallback via
+                             //   [], direct argument). The rule now also matches the counter call
+                             //   inside an `if` condition, which it used to miss.
                              //   2026-10-12: 72->78. Two S13 rules carried the ids of the
                              //   S2 rules they were copied from
                              //   (mcp-client-supplied-scope-overrides-session and its
@@ -140,7 +229,7 @@ jobs:
             // SILENT and the hardened positive fixtures must still FIRE, so a later regex tweak
             // cannot quietly gut either the false-positive fix or the true positive it protects.
             const byFile = (sub) => d.results.filter((r) => r.path.includes(sub));
-            for (const s of ["batch-resolve-local-map-get", "write-parent-server-derived-value"]) {
+            for (const s of ["batch-resolve-local-map-get", "write-parent-server-derived-value", "admin-named-cli-command-not-a-tool", "wildcard-in-markup"]) {
               if (byFile(s).length) {
                 console.error("negative fixture " + s + " must be SILENT but fired " + byFile(s).length + " time(s)");
                 process.exit(1);
@@ -154,6 +243,16 @@ jobs:
             }
             console.log("per-rule-id canary: negatives silent, S6/S12 positives visible");
           '
+      - name: every fixture annotation behaves as marked (ratchet)
+        # The count above cannot see a rule that never fires on its own
+        # positive fixture: `want` is set to whatever fires. Measured
+        # 2026-10-28: 13 of 45 rules fired nowhere in their fixtures under a
+        # green count. This step checks each `ruleid:` / `ok:` marker; known
+        # failures are listed in the baseline, and both a new failure and a
+        # listed entry that no longer fails turn the job red.
+        run: |
+          node detection/check-annotations.js /tmp/semgrep-fixtures.json \
+            detection/semgrep/fixtures detection/fixture-annotation-baseline.json
 
   dogfood-action-on-self:
     name: dogfood — the action must FIND the planted vulnerabilities in src/

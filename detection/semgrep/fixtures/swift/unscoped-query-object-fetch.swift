@@ -58,6 +58,64 @@ func deleteRecordSafe(req: Request, id: UUID, projectId: String) async throws {
     }
 }
 
+// FIRE: delete through a query filtered by id only.
+func deleteNoteVuln(req: Request, id: UUID) async throws {
+    // ruleid: mcp-unscoped-query-object-fetch-swift
+    try await Note.query(on: req.db).filter(\.$id == id).delete()
+}
+
+// FIRE: a closure route; the id is the route parameter.
+func routes(_ app: Application) throws {
+    app.get("notes", ":id") { req async throws -> Note in
+        // ruleid: mcp-unscoped-query-object-fetch-swift
+        guard let note = try await Note.find(req.parameters.get("id"), on: req.db) else {
+            throw Abort(.notFound)
+        }
+        return note
+    }
+}
+
+// OK: the id comes from the authenticated user. Pins the req.auth sanitizer.
+func myNote(req: Request) async throws -> Note? {
+    let user = try req.auth.require(User.self)
+    // ok: mcp-unscoped-query-object-fetch-swift
+    return try await Note.find(user.pinnedNoteID, on: req.db)
+}
+
+// OK: the same through the optional req.auth.get. Pins that sanitizer.
+func myNoteIfSignedIn(req: Request) async throws -> Note? {
+    // ok: mcp-unscoped-query-object-fetch-swift
+    return try await Note.find(req.auth.get(User.self)?.pinnedNoteID, on: req.db)
+}
+
+// OK: the id is a server constant; only the db handle comes from the request.
+// Pins the focus on the id argument.
+func welcomeNote(req: Request) async throws -> Note? {
+    // ok: mcp-unscoped-query-object-fetch-swift
+    return try await Note.find(Note.welcomeID, on: req.db)
+}
+
+// OK: an object receiver, not a model class. Pins the class-name filter.
+func cachedNote(req: Request, id: UUID) async throws -> Note? {
+    // ok: mcp-unscoped-query-object-fetch-swift
+    return try await cache.find(id, on: req.db)
+}
+
+// OK: a query through the parent relation is scoped to that parent. Pins the
+// query-chain text filter.
+func myNoteByID(req: Request, id: UUID) async throws -> Note? {
+    let user = try req.auth.require(User.self)
+    // ok: mcp-unscoped-query-object-fetch-swift
+    return try await user.$notes.query(on: req.db).filter(\.$id == id).first()
+}
+
+// OK: a lookup by slug is not a by-id fetch; this rule covers the id key only.
+// Pins the id filter inside the chain.
+func noteBySlug(req: Request, slug: String) async throws -> Note? {
+    // ok: mcp-unscoped-query-object-fetch-swift
+    return try await Note.query(on: req.db).filter(\.$slug == slug).first()
+}
+
 final class Credential: Model, @unchecked Sendable {
     static let schema = "credentials"
     @ID(key: .id) var id: UUID?

@@ -4,26 +4,42 @@ rules:
   - php
   severity: WARNING
   message: A Laravel/Symfony MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to an Eloquent query, binds it as org_id in a where clause). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-      - pattern: $request->header($HDR)
-      - pattern: $request->headers->get($HDR)
-      - pattern: $request->getHeaderLine($HDR)
-      - pattern: $request->hasHeader($HDR)
-      - pattern: $_SERVER[$HDR]
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern-either:
-      - pattern: $MODEL::$METHOD(..., $hdrval, ...)
-      - pattern: $MODEL::where($KEY, $hdrval)->...
-      - pattern: $MODEL::where($KEY, $hdrval, ...)->...
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(where|find|findOrFail|first|get|select|all).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+  # Taint mode: the header read and the query are separate statements. The
+  # earlier version put both under one `patterns` (which must match the same
+  # range), compared header names without their quotes, and referenced
+  # $hdrval/$KEY inconsistently, so it matched nothing. The finding is
+  # reported at the value that selects the scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $R->header($HDR, ...)
+      - pattern: $R->headers->get($HDR, ...)
+      - pattern: $R->getHeaderLine($HDR)
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  - patterns:
+    - pattern: $_SERVER[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["']HTTP_(X_ORG_ID|X_ORG|X_TENANT_ID|X_TENANT|X_WORKSPACE_ID|X_ACCOUNT_ID|X_CUSTOMER_ID|X_PROJECT_ID|X_USER_ID|X_FORWARDED_FOR|X_REAL_IP|X_CLIENT_IP)["']$
+  pattern-sinks:
+  # A scope-named column in a where clause. One pattern covers both
+  # Model::where(...) and a chained ->where(...) (measured: each spelling
+  # alone matches both). client_ip is the IP-scoping variant of S10.
+  - patterns:
+    - pattern: $Q->where($K, $V, ...)
+    - metavariable-regex:
+        metavariable: $K
+        regex: (?i)^["'](org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id|client_ip)["']$
+    - focus-metavariable: $V
+  # A static finder by key; the call is the sink.
+  - patterns:
+    - pattern: $M::$METHOD($V, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(find|findOrFail|findMany|firstWhere)$
   metadata:
     cwe:
     - CWE-639
@@ -39,30 +55,59 @@ rules:
   - php
   severity: ERROR
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  # The earlier version matched the comparison and then required the same
+  # range to be a whole `if ($PARAM === "*") { ... }`. A comparison is never
+  # a whole `if`, so `a || b` never fired, any static call in the body counted
+  # (a logging call fired), and there was no admin-role guard. The `if` form
+  # now reports the whole statement, searches its condition, and requires a
+  # list-all call on a model class in its body (`Note::all()`); an instance
+  # call such as `$notes->all()` on a collection is not a model read.
   patterns:
   - pattern-either:
-      - pattern: $PARAM === "*"
-      - pattern: $PARAM === "all"
-      - pattern: '"*" === $PARAM'
-      - pattern: '"all" === $PARAM'
-  - metavariable-regex:
-      metavariable: $PARAM
-      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-  - pattern-either:
+    - patterns:
       - pattern: |
-          if ($PARAM === "*") {
-            ...
-            $MODEL::$METHOD(...);
-            ...
-          }
+          if ($COND) { ... }
+      - metavariable-pattern:
+          metavariable: $COND
+          patterns:
+          - pattern-either:
+            - pattern: $PARAM === "*"
+            - pattern: $PARAM === "all"
+            - pattern: '"*" === $PARAM'
+            - pattern: '"all" === $PARAM'
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
       - pattern: |
-          if ($PARAM === "all") {
-            ...
-            $MODEL::$METHOD(...);
-            ...
-          }
-      - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
-      - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
+          if ($COND) { ... <... $MODEL::$METHOD(...) ...>; ... }
+      - metavariable-regex:
+          metavariable: $MODEL
+          regex: ^[A-Z][A-Za-z0-9_]*$
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i)^(all|listAll|getAll|findAll|selectAll)$
+    - patterns:
+      - pattern-either:
+        - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
+      - metavariable-regex:
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      - metavariable-pattern:
+          metavariable: $WIDE
+          patterns:
+          - pattern: $X
+          - pattern-not: "'...'"
+          - pattern-not: '"..."'
+  - pattern-not-inside: |
+      requireAdminRole(...);
+      ...
+  - pattern-not-inside: |
+      checkAdminRole(...);
+      ...
+  - pattern-not-inside: |
+      assertAdminRole(...);
+      ...
   metadata:
     cwe:
     - CWE-639
@@ -76,27 +121,60 @@ rules:
   - php
   severity: WARNING
   message: An object is fetched by id through a query that carries no tenant key (workspace_id / org_id / tenant_id / project_id ...), or fetched straight by primary key. If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
-  patterns:
-  - pattern-either:
-      - pattern: $MODEL::find($ID)
-      - pattern: $MODEL::findOrFail($ID)
-      - pattern: $MODEL::findByPk($ID)
-      - pattern: $MODEL::findBy($COLS, $VALS)
-      - pattern: $REPO->find($ID)
-      - pattern: $MODEL::where('id', $ID)->first()
-      - pattern: $MODEL::destroy($ID)
-  - pattern-not:
-      patterns:
+  # The earlier version applied `metavariable-regex: $MODEL` (`.*Model|.*Eloquent`)
+  # to the whole rule: the `$REPO->find` branch never binds $MODEL, and an
+  # Eloquent model is named `Credential`, not `CredentialModel`, so the rule
+  # only fired on Contao `findByPk`. Each branch now carries its own filter.
+  #
+  # The id must come from the caller: a parameter of the enclosing function or
+  # method (an MCP tool handler's `$input`, a Laravel `$request`), or a request
+  # superglobal. Taint follows it through `$input['id']` and `$request->header()`.
+  # Every sink takes the id as its only key, so a lookup that also binds a
+  # tenant column (`findOneBy([...])`, a second `where`) is not a sink; a
+  # tenant-key pattern-not here was measured redundant and removed.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        function $F(..., $P, ...) { ... }
+    - pattern: $P
+  - pattern: $_GET
+  - pattern: $_POST
+  - pattern: $_REQUEST
+  # A keyed criteria array (`Event::find(['timestamp' => $t, ...])`) is a
+  # lookup by several columns, not by an id; it stays silent whether written
+  # inline or built into a variable first.
+  #
+  # The request is caller input, but the user it authenticated is not: an id
+  # read from `$request->user()` is a server-side value.
+  pattern-sanitizers:
+  - pattern: '[..., $K => $V, ...]'
+  - pattern: $R->user()
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      # A static finder on a model class (Eloquent, Contao). Contao's findBy
+      # counts only when the id column is the whole criteria. The class-name
+      # filter keeps out a scoped chain (`Note::whereBelongsTo($o)->where(...)`
+      # binds the whole chain as $MODEL) and an object receiver (`$cache`).
+      - patterns:
         - pattern-either:
-            - pattern: '$MODEL::findOneBy([..., "$TENANT" => $T, ...])'
-            - pattern: '$MODEL::where(..., $TENANT, ...)->first()'
-            - pattern: '$REPO->find($ID, $TENANT)'
+          - pattern: $MODEL::find($ID)
+          - pattern: $MODEL::findOrFail($ID)
+          - pattern: $MODEL::findByPk($ID)
+          - pattern: $MODEL::destroy($ID)
+          - pattern: $MODEL::where('id', $ID)->first()
+          - pattern: $MODEL::findBy(['id=?'], [$ID])
         - metavariable-regex:
-            metavariable: $TENANT
-            regex: (?i)^(tenant_id|org_id|workspace_id|project_id|account_id|user_id|owner_id)$
-  - metavariable-regex:
-      metavariable: $MODEL
-      regex: .*Model|.*Eloquent
+            metavariable: $MODEL
+            regex: ^[A-Z][A-Za-z0-9_]*$
+      # A repository fetched by id (Doctrine `$repo->find($id)`).
+      - patterns:
+        - pattern: $REPO->find($ID)
+        - metavariable-regex:
+            metavariable: $REPO
+            regex: (?i)^\$\w*(repo|repository)$
+    - focus-metavariable: $ID
   metadata:
     cwe:
     - CWE-639

@@ -31,11 +31,12 @@ type ListOut struct {
 
 func SearchNotes(ctx context.Context, req *CallToolRequest, args SearchArgs) (*CallToolResult, SearchOut, error) {
 	session := resolveSession(store, args.Token)
+	// The rule reports the fallback block, where the caller's value wins.
+	// ruleid: mcp-client-supplied-scope-overrides-session-go
 	scope := args.OrgID
 	if scope == "" {
 		scope = session.OrgID
 	}
-	// ruleid: mcp-client-supplied-scope-overrides-session-go
 	return nil, SearchOut{Notes: store.SearchNotesByOrg(scope, args.Query)}, nil
 }
 
@@ -49,10 +50,22 @@ func SearchNotesFixed(ctx context.Context, req *CallToolRequest, args SearchArgs
 // silent, or the rule fires on every ordinary Go default and gets
 // switched off.
 func ListRecent(ctx context.Context, req *CallToolRequest, args ListArgs) (*CallToolResult, ListOut, error) {
+	// ok: mcp-client-supplied-scope-overrides-session-go
 	limit := args.Limit
 	if limit == 0 {
 		limit = 50
 	}
-	// ok: mcp-client-supplied-scope-overrides-session-go
 	return nil, ListOut{Notes: store.RecentNotes(limit)}, nil
+}
+
+// Legitimate neighbor: the same string fallback on a field that is not a
+// scope key. Pins the field-name regex.
+func SearchDefaultQuery(ctx context.Context, req *CallToolRequest, args SearchArgs) (*CallToolResult, SearchOut, error) {
+	session := resolveSession(store, args.Token)
+	// ok: mcp-client-supplied-scope-overrides-session-go
+	query := args.Query
+	if query == "" {
+		query = session.DefaultQuery
+	}
+	return nil, SearchOut{Notes: store.SearchNotesByOrg(session.OrgID, query)}, nil
 }

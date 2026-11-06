@@ -89,6 +89,69 @@ def get_project_safe(id)
   current_company.projects.kept.includes(:tasks).find(id)
 end
 
+# FIRE: a Rails action, id from params.
+def show
+  # ruleid: mcp-unscoped-query-object-fetch-ruby
+  Note.find(params[:id])
+end
+
+# FIRE: the other fetch shapes with an id from params (miru-web:
+# Company.find_by(id: params[:id])).
+def edit
+  # ruleid: mcp-unscoped-query-object-fetch-ruby
+  Company.find_by(id: params[:id])
+end
+
+def update
+  # ruleid: mcp-unscoped-query-object-fetch-ruby
+  Note.find_by!(id: params[:note_id])
+end
+
+def preview
+  # ruleid: mcp-unscoped-query-object-fetch-ruby
+  Note.where(id: params[:id]).first
+end
+
+def destroy
+  # ruleid: mcp-unscoped-query-object-fetch-ruby
+  Note.delete(params[:id])
+end
+
+# FIRE: an MCP tool with a keyword argument.
+def call(note_id:)
+  # ruleid: mcp-unscoped-query-object-fetch-ruby
+  Note.find(note_id)
+end
+
+# OK: the id comes from the signed-in user, not from the caller. Pins the
+# parameter-origin requirement.
+def pinned_note(format)
+  pinned = current_user.pinned_note_id
+  # ok: mcp-unscoped-query-object-fetch-ruby
+  Note.find(pinned)
+end
+
+# OK: a where-scope chain is not a bare model constant. Pins the $MODEL filter.
+def get_note_in_org(id, org_id)
+  # ok: mcp-unscoped-query-object-fetch-ruby
+  Note.where(org_id: org_id).find(id)
+end
+
+# OK: a background job; the id was enqueued by server code. Pins the
+# perform exclusion.
+class NoteExportJob < ApplicationJob
+  def perform(note_id)
+    # ok: mcp-unscoped-query-object-fetch-ruby
+    Note.find(note_id)
+  end
+end
+
+# OK: a filesystem call, not a record lookup. Pins the File/Dir exclusion.
+def remove_export(path)
+  # ok: mcp-unscoped-query-object-fetch-ruby
+  File.delete(path)
+end
+
 class Credential < ActiveRecord::Base; end
 class Note < ActiveRecord::Base; end
 class Employment < ActiveRecord::Base; end

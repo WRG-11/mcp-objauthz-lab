@@ -75,6 +75,101 @@ function logScopeValue(string $scope): void {
     }
 }
 
+// FIRE: the "all" spelling alone.
+function vulnExportAll(string $token, string $tenant): \Illuminate\Database\Eloquent\Collection {
+    $session = resolveSession($token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-php
+    if ($tenant === "all") {
+        return Note::all();
+    }
+    return Note::where('org_id', $session->org_id)->get();
+}
+
+// FIRE: the literal-first spellings.
+function vulnExportLiteralFirst(string $token, string $org_id): \Illuminate\Database\Eloquent\Collection {
+    $session = resolveSession($token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-php
+    if ("*" === $org_id) {
+        return Note::all();
+    }
+    return Note::where('org_id', $session->org_id)->get();
+}
+
+function vulnExportLiteralFirstAll(string $token, string $org_id): \Illuminate\Database\Eloquent\Collection {
+    $session = resolveSession($token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-php
+    if ("all" === $org_id) {
+        return Note::all();
+    }
+    return Note::where('org_id', $session->org_id)->get();
+}
+
+// FIRE: the "all" spelling of the ternary.
+function vulnExportTernaryAll(string $token, string $tenant): \Illuminate\Database\Eloquent\Collection {
+    $session = resolveSession($token);
+    // ruleid: mcp-wildcard-sentinel-scope-bypass-php
+    return $tenant === "all" ? Note::all() : Note::where('org_id', $session->org_id)->get();
+}
+
+// OK: `all()` on a collection the caller already holds is not a model read.
+// Pins the model-class filter.
+function flattenScoped(array $groups, string $scope): array {
+    $notes = collect($groups);
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    if ($scope === "*") {
+        return $notes->all();
+    }
+    return [];
+}
+
+// OK: a static call on a class that reads nothing (the Log facade). Pins the
+// list-all method regex.
+function auditScope(string $scope): void {
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    if ($scope === "*") {
+        Log::info('wildcard scope requested');
+    }
+}
+
+// OK: guarded by checkAdminRole. Pins that guard.
+function fixedExportChecked(string $token, string $org_id): \Illuminate\Database\Eloquent\Collection {
+    $session = resolveSession($token);
+    checkAdminRole($session);
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    if ($org_id === "*") {
+        return Note::all();
+    }
+    return Note::where('org_id', $session->org_id)->get();
+}
+
+// OK: guarded by assertAdminRole. Pins that guard.
+function fixedExportAsserted(string $token, string $org_id): \Illuminate\Database\Eloquent\Collection {
+    $session = resolveSession($token);
+    assertAdminRole($session);
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    if ($org_id === "*") {
+        return Note::all();
+    }
+    return Note::where('org_id', $session->org_id)->get();
+}
+
+// OK: "all" on an export format, not a scope. Pins the parameter-name regex
+// of both forms.
+function exportFields(string $format): array {
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    if ($format === "all") {
+        return Field::all();
+    }
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    return $format === "*" ? Field::all() : Field::defaults();
+}
+
+// OK: a ternary that picks a CSS class. Pins the string-literal exclusion.
+function filterButtonClass(string $scope): string {
+    // ok: mcp-wildcard-sentinel-scope-bypass-php
+    return $scope === "all" ? 'active' : '';
+}
+
 function resolveSession(string $token): object { return new class { public $org_id = ''; }; }
 function requireAdminRole(object $session): void {}
 function logger(): \Psr\Log\LoggerInterface { return new class implements \Psr\Log\LoggerInterface { public function log($level, $message, array $context = []): void {} }; }

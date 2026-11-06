@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `detection/check-annotations.js` checks every `ruleid:` / `ok:` marker in the
+  detection fixtures: a `ruleid:` line must be covered by a finding of its rule,
+  and an `ok:` line must not be. Known failures are listed one by one in
+  `detection/fixture-annotation-baseline.json`; CI fails on a new failure and on
+  a listed entry that no longer fails. The count assertion could not see a rule
+  that never fires, because its expected total is whatever fires.
 - `skills/mcp-audit/`: a Claude Code skill that audits the tool surface of an
   MCP server and writes one evidence-only report. It covers descriptions,
   result shapes, naming, errors, tests, unused tools and state handling, and on
@@ -39,6 +45,258 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The detection-rule fixtures job failed with a bash syntax error: two
+  apostrophes in count comments closed the single-quoted `node -e` script
+  early, the same failure as on 2026-08-22. `ci-hardening` now fails when an
+  apostrophe ends a `node -e '...'` script before its closing line.
+- `mcp-authz-scope-from-request-header` (JavaScript/TypeScript) fired nowhere,
+  not even on its own fixture. The header read and the scoping call were two
+  positive patterns in one `patterns` block, which semgrep requires to match the
+  same range, so no code could satisfy both. The rule is now a taint rule from
+  the scope header to the scoping argument, and reports at that argument. It
+  also covers `headers.get(...)`, skips the header accessor itself, and leaves
+  quota and rate-limit calls to `mcp-ratelimit-scope-from-forwarded-header`.
+  The fixture gained two `.get` positives and five legitimate neighbors that
+  together pin every guard of the rule (each guard, removed on its own, makes
+  the fixture fail).
+- `mcp-authz-scope-from-request-header-py` had the same defect and fired
+  nowhere. It is now a taint rule with three sinks: a positional argument, a
+  scope-named key in a dict literal, and a scope-named keyword argument. Its
+  fixture gained a subscript-read positive, a keyword-argument positive, and
+  legitimate neighbors for every guard; quota calls are left to
+  `mcp-ratelimit-scope-from-forwarded-header-py`.
+- `mcp-authz-scope-from-request-header-java` matched nothing. It compared the
+  header name without the quotes that semgrep keeps on a string literal,
+  referenced `$HDRVAL` and `$KEY` that no pattern bound, and required the header
+  read and the scoping call to match one range. It is now a taint rule from
+  `getHeader(...)`, `getHeaders().getFirst(...)` and `@RequestHeader`
+  parameters (all three annotation spellings) to a scoping call with at least
+  one argument; header accessors and quota calls are skipped. The fixture
+  gained three positives and four neighbors; removing any one guard makes it
+  fail.
+- `mcp-authz-scope-from-request-header-php` matched nothing, for the same
+  reasons as the Java rule. It is now a taint rule from Laravel `header()`,
+  Symfony `headers->get()`, PSR-7 `getHeaderLine()` and `$_SERVER['HTTP_X_...']`
+  to a scope-named column in a `where` clause (`client_ip` included, for the
+  IP-scoping variant) or a static finder. The first positive's marker sat on an
+  `Authorization` read that is not a scope header; it now sits on the query
+  that uses `x-org-id`. The fixture gained three positives and five neighbors;
+  removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-ruby` matched nothing, for the same
+  reasons. It is now a taint rule from `headers[...]`, `headers.fetch(...)` and
+  Rack `env["HTTP_X_..."]` to a scope-named key in a `where`/`find_by` hash or a
+  `find` by primary key. One fixture case marked as a positive read a bearer
+  token from `Authorization` and passed it to an authentication check; that is
+  not a client-chosen scope and is outside the rule's own header list, so it is
+  now an `ok:` neighbor. The fixture gained two positives and five neighbors;
+  removing any one guard makes it fail.
+- `mcp-missing-object-authz-check` counted only guard calls as a check, so a
+  handler that compares the object's scope key with the session's inline
+  (`if (!note || note.orgId !== session.orgId) unavailable();`) was reported.
+  That is this lab's own `note_get`, the correctly authorized handler, and
+  the published scenario count listed it as S1 being flagged. An `if` whose
+  condition compares the same key on the object and on the session now counts
+  as the check, in either operand order and with `!==` or `!=`; the `!=` forms
+  also match Python. A comparison of two different keys still fires. The
+  body of the `if` is not checked. 9 mutants, all killed.
+- The scenario count against `src/tools.js` was re-measured: a rule reports a
+  line in the handlers of 9 of the 13 scenarios (S2, S4, S6, S7, S8, S9, S10,
+  S11, S13), not 7 (S1, S2, S6, S7, S8, S12, S13). S1 was a false positive on
+  `note_get`; S3 and S12 have their scope filter in the fixed branch of the
+  toggle and were flagged only through the batch rule's `.filter(Boolean)`
+  defect; S4, S10 and S11 are found since their rules were fixed. The README,
+  `detection/README.md` and `docs/detection-notes.md` say so and state how a
+  scenario is counted.
+- The fixture annotation baseline is empty: every `ruleid:` and `ok:` marker
+  in the detection fixtures now holds. The last four entries were three rule
+  defects and one misplaced marker:
+  - `mcp-ratelimit-scope-from-forwarded-header` listed 40 patterns, all
+    written with optional chaining. A pattern with `?.` does not match code
+    without it, so `extra.requestInfo.headers["x-forwarded-for"]` was never
+    found, and each pattern needed the header read stored with a fallback and
+    then passed on, so the lab's own S11 handler (two variables and a toggle
+    ternary between the read and the counter) was missed too. It is now a
+    taint rule: a client-identity header read is the source, a quota or
+    rate-limit call the sink, and it reports the call. The fixture gained one
+    case for each header spelling and flow. It includes the S11 flow and a neighbor
+    for each name filter (5 mutants, all killed); before, 4 of its 12 cases
+    fired. The quota lookup in the header-scope fixture, which that fixture
+    already said belongs to this rule, is now marked for it.
+  - `mcp-batch-resolve-missing-per-item-scope-filter` was silenced only when
+    the batch read was exactly `x = ids.map(...)`, so `ids.map(...)
+    .filter(Boolean)` fired even with a scope filter after it, and any later
+    `.filter(...)`, such as one that only drops missing ids, silenced it. It
+    is now silenced by a filter that compares the same key on the item and
+    the caller's side (`n.orgId === session.orgId`), later or chained. A
+    filter comparing two different keys still fires. The receiver-name
+    filter (`noteCache.getNote`) gained the neighbor it lacked (8 mutants,
+    all killed).
+  - `mcp-client-supplied-scope-overrides-session-go` reports the fallback
+    block, but its marker sat on the `return` below it. The marker moved to
+    the block, and a string fallback on a non-scope field (`args.Query`) now
+    pins the field-name filter, which the integer `limit` neighbor never
+    could.
+- The seven `mcp-wildcard-sentinel-scope-bypass` rules (JavaScript/TypeScript/
+  Python, Java, C#, Kotlin, PHP, Ruby, Swift) never fired on the `if` form,
+  which is the form most of their fixture cases use. Each rule matched the
+  `"*"`/`"all"` comparison as one range and the widening call (or a whole
+  `if` built around the bare comparison) as another; the two never overlap,
+  so `if (a === "*" || a === "all")` was always missed, while in several
+  languages any call in the body counted and a logging call fired. The `if`
+  form now reports the whole statement: its condition is searched for the
+  comparison on a scope-named parameter, and its body must widen the read (a
+  list-all call, a whole-table load such as `Note.all`, `Note::all()`,
+  `db.Notes.ToListAsync()` or a filterless Fluent query). The ternary form
+  keeps its string-literal exclusion. `requireAdminRole`, `checkAdminRole`
+  and `assertAdminRole` (in each language's spelling) now silence the rule in
+  every language; before, only JavaScript had them. Kotlin also gains the
+  `when` form, which could never fire before (it matches a two-branch `when`
+  only, because Kotlin patterns accept no `...` between branches). One parser
+  limit is marked rather than hidden: in Swift `a == "*" || b` parses as
+  `a == ("*" || b)`, so only the last comparison of a `||` chain is found
+  (`todoruleid`). Each fixture gained a positive per comparison form and a
+  neighbor per guard; every guard fails its fixture when removed (107
+  mutants across the seven rules). Fixture findings 179 -> 211; the
+  annotation baseline drops 11 missed and 5 wrongly fired entries.
+- `mcp-unscoped-query-object-fetch-py` knew `filter_by(id=...)` and
+  `session.get(Model, id)` but not SQLAlchemy 2.0's
+  `select(Model).where(Model.id == x)`, so a FastAPI handler that loads a
+  tenant-owned row by a path id with no tenant filter went unseen. The new
+  branch reports that lookup only inside a route handler (`@router.get(...)`
+  and the other method decorators) whose parameter is the id, and stays
+  silent when the same query also filters by a tenant or owner key or when
+  the id goes to a check call (`require_...`, `check_...`, `verify_...`,
+  `..._membership(...)`) earlier in the handler. Measured on one real FastAPI
+  MCP server: the bare shape fired 72 times for 3 real bugs; with these
+  limits it fires 6 times, the 3 bugs among them. The fixture gained 4
+  positives and 9 neighbors (10 mutants, all killed).
+- `mcp-unscoped-query-object-fetch-swift` matched nothing: it had no Fluent
+  shape (`find($ID)` with one argument, where Fluent's is `find(id, on: db)`,
+  and `query(\.id == ...)`, which is not Fluent syntax). It is now a taint
+  rule: the id must come from a function parameter, or from
+  `req.parameters.get` in a closure route, and reach `Model.find(id, on:)` or
+  a `Model.query(on:)` chain whose only filter is `\.$id` and that ends in
+  `.first()` or `.delete()`. An id read through `req.auth` stays silent, as do
+  a tenant filter in the chain and a query through a parent relation. The
+  Swift parser binds a leading `try await` into the receiver of `.first()`, so
+  the chain filter allows it. In 90 public Swift repositories there is no
+  Fluent query (the one match is inside a string literal), so the rule fires
+  0 times there and its precision and recall on real code are unmeasured.
+- `mcp-unscoped-query-object-fetch-php` only fired on Contao `findByPk` and
+  `findBy`: a `$MODEL` filter (`.*Model|.*Eloquent`) on the whole rule left
+  out the repository branch, which never binds `$MODEL`, and every Eloquent
+  model, which is not named `*Model`. It is now a taint rule: the id must
+  come from a parameter of the enclosing function or method, or from
+  `$_GET`/`$_POST`/`$_REQUEST`, and reach a by-id finder (`find`,
+  `findOrFail`, `findByPk`, `destroy`, `where('id', ...)->first()`, Contao
+  `findBy(['id=?'], [...])`, or `find` on a receiver named like a
+  repository). An id read from `$request->user()` and a keyed criteria array
+  (`Event::find(['timestamp' => ...])`) stay silent. A tenant-key exclusion
+  that no single-key sink could reach was removed. The fixture annotation for
+  the Contao case sat one line above its finding and was moved; the
+  ProcessWire `findPages($input)` case passes a selector rather than an id; it is
+  now `todoruleid`. Measured on 24 public PHP repositories, the rule fires 6
+  times; 5 are a repository fetch by id in MCP ability handlers, and 1 is a
+  criteria array that gains a key through `$args['k'] = $v` after it is
+  built, which the sanitizer does not follow.
+- `mcp-unscoped-query-object-fetch-ruby` only matched an id taken from
+  `params[...]`, while every case in its fixture took the id as a method
+  parameter, so it matched nothing there. It now also matches an id that is a
+  parameter of the enclosing method (positional or keyword, as in an MCP
+  tool's `def call(id:)`), and stays silent on an id read from the server
+  side. A tenant-key exclusion that was measured redundant (a one-key
+  `find_by(id: ...)` hash already leaves out a lookup that binds a tenant
+  column) was removed. Measured on 16 public Ruby repositories, the
+  parameter branch first fired 103 times, 66 of them inside a background
+  job's `perform(id)` (the id comes from the server code that enqueued the
+  job, and the check belongs there) and one on `File.delete(path)`; both are
+  now excluded, which brings the parameter branch to 36. The fixture gained a
+  positive per fetch shape and four neighbors; removing any one guard makes it
+  fail.
+- `mcp-unscoped-query-object-fetch-kotlin` matched nothing, for the same
+  reason as the C# rule: a `$REPO` filter on the whole rule, which was also
+  case-sensitive (`.*Dao` did not match `dao`). The repository branch now
+  matches `findById`/`findByIdOrNull`/`getById`/`deleteById` with one argument
+  on a receiver named like a repository or DAO, which keeps in-memory registries
+  out; the Exposed branch keeps its id-only `where` block. The fixture gained a
+  positive and two neighbors; removing any one guard makes it fail.
+- `mcp-unscoped-query-object-fetch-csharp` matched nothing: a
+  `metavariable-regex` on `$REPO` applied to the whole rule, and the DbContext
+  branches never bind `$REPO`. Each branch now carries its own filter
+  (`Find`/`FindAsync` on a set, `FindAsync<T>` on a context,
+  `First`/`Single`(`OrDefault`)(`Async`) with an id-only lambda, and
+  `Find`/`FindAsync` on a repository). The id must now come from the caller:
+  a parameter of a public method, or an expression built from one. On real
+  clones most id-only fetches take a server-side id (a claim, the user's
+  profile, a row just created, a foreign key of a loaded row), which is not
+  S7. The rule also fires on three id-only finders in the C# header fixture,
+  now marked for it; the fourth reads the `out` variable of `TryGetValue`, which
+  the rule does not follow, and is marked `todoruleid`. The fixture gained
+  three positives and six neighbors; removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-swift` matched nothing, for the same
+  reasons. It is now a taint rule from `req.headers[...]` and
+  `req.headers.first(name:)` to a Fluent `filter` on a scope key path or a
+  `find(_:on:)` by key. A filter finding sits on the compared value, so a
+  chained query reports the filter line. The fixture gained two positives and
+  three neighbors; removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-kotlin` matched nothing, for the same
+  reasons. It is now a taint rule from `call.request.header(...)`,
+  `call.request.headers[...]` and Spring `@RequestHeader` parameters to a
+  list/find/get/search/query/select call, positional or named argument, with
+  quota and rate-limit calls excluded. Two fixture cases were marked as
+  findings although the rule never covered them: an `Mcp-Session-Id` transport
+  lookup (a server-issued session handle) and a checked bearer token. They are
+  now `ok:` neighbors. The fixture gained one positive and four neighbors;
+  removing any one guard makes it fail.
+- `mcp-authz-scope-from-request-header-csharp` matched nothing, for the same
+  reasons. It is now a taint rule from `Headers[...]`, the `out` variable of
+  `Headers.TryGetValue(...)` and `[FromHeader]` parameters to a LINQ comparison
+  with a scope property (either operand order) or a `Find`/`FindAsync` by key.
+  The fixture gained two positives and six neighbors; removing any one guard
+  makes it fail.
+- `mcp-batch-resolve-missing-per-item-scope-filter-py` matched only an
+  assignment (`x = [store.get_x(i) for i in ids]`), so a handler that returns
+  the comprehension directly, the shape of its own positive fixture, was never
+  reported. Measured on 22 real repositories, the old rule still reported 7
+  assignments there, all reviewed as false positives: 5 were plain imported
+  functions (semgrep resolves `from m import get_x` to `m.get_x`, so they
+  matched `$STORE.$METHOD`) and 2 iterated ids the server had derived itself.
+  The rule now matches the comprehension itself, requires a method call in the
+  source text, and requires ids that come from a handler parameter or a field
+  of one (`args.ids`). It still skips a comprehension that is filtered per item
+  afterwards or in an enclosing comprehension. On the same repositories it
+  reports 1 of those 7 places, and it fires on its own positives. New fixtures
+  cover each guard.
+- `detection/README.md` said every rule fires on its vulnerable fixture and stays
+  silent on the fixed one. Measured with semgrep 1.182.1, 13 of 45 rules fire
+  nowhere in their own fixtures and 5 more fire on fewer lines than marked
+  (70 of 139 `ruleid:` markers uncovered, 7 of 180 `ok:` lines covered). The page
+  now says so and points at the new per-annotation check; the rules themselves
+  are not changed by this entry.
+- `mcp-wildcard-sentinel-scope-bypass` fired on a ternary whose wide branch is
+  a string literal, so a UI filter button rendered with
+  `scope === 'all' ? 'active' : ''` was reported as a scope bypass. A string
+  literal in that branch picks a label or a CSS class and widens nothing; the
+  ternary forms now require a non-literal wide branch. The real-capture case
+  (a scanned MCP server's web UI) is added to `wildcard-in-markup.js`, which
+  joins the CI silence list. Fixture total unchanged; the positive ternary
+  cases in JavaScript and Python still fire.
+- `mcp-ratelimit-scope-from-forwarded-header-py` had no positive fixture and
+  missed the most common quota shape: once the header value was stored in a
+  variable, a counter call inside an `if` condition
+  (`if store.get_quota_count(key) >= 10:`) did not match, while the same
+  call as an assignment, a bare statement or a `return` did. The counter
+  call is now matched anywhere inside the statement. New fixture
+  `xff-for-ratelimit.py` ports the JavaScript real-capture fixture and fires
+  three times; its session-keyed case stays silent. Fixture total 78 -> 81.
+- `mcp-admin-named-tool-missing-role-check-py` fired on any decorator, so a
+  typer/click CLI command named `admin` was reported as an unguarded MCP tool.
+  The rule now requires a tool registration decorator (`@<x>.tool` or
+  `@<x>.tool(...)`), which is what its message describes. The new negative
+  fixture `admin-named-cli-command-not-a-tool.py` comes from a real false
+  positive (a loopback-only admin panel command in an MCP server repository)
+  and is on the CI silence list. It does not change the fixture total; the existing
+  positive case still fires.
 - Twelve references in the rule files pointed at three README anchors that no
   longer existed (`#scenario-s6--foreign-parent`,
   `#scenario-s11--xff-quota-bypass`, `#scenario-s13--jwt-token-scope-confusion`).

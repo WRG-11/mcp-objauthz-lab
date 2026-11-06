@@ -1,0 +1,5 @@
+{
+  "_comment": "Known per-annotation failures of the detection fixtures, measured 2026-10-28 with semgrep 1.182.1. A key is <fixture>|<rule>|<marked line text>. detection/check-annotations.js fails CI on any failure not listed here and on any listed entry that no longer fails. Remove an entry in the same commit that fixes it; do not add entries to make a new rule pass.",
+  "missed": [],
+  "okFired": []
+}

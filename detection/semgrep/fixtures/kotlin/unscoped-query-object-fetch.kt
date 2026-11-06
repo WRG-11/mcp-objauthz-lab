@@ -75,6 +75,25 @@ suspend fun getDerivedSafe(id: String, tenantId: String): Any? {
     return repo.findByIdAndTenantId(id, tenantId)
 }
 
+// FIRE: Spring Data getById with id only, on a receiver named *Repository.
+suspend fun getNoteVuln(id: String): Any? {
+    // ruleid: mcp-unscoped-query-object-fetch-kotlin
+    return noteRepository.getById(id)
+}
+
+// OK: an in-memory registry looked up by name is not a tenant-owned row.
+// Pins the receiver regex.
+suspend fun lookupTool(name: String): Any? {
+    // ok: mcp-unscoped-query-object-fetch-kotlin
+    return tools.findById(name)
+}
+
+// OK: a repository call that is not a by-id fetch. Pins the method regex.
+suspend fun countNotes(id: String): Any? {
+    // ok: mcp-unscoped-query-object-fetch-kotlin
+    return repo.existsById(id)
+}
+
 class Repo {
     suspend fun findByIdOrNull(id: String): Any? = TODO()
     suspend fun findById(id: String): Any? = TODO()
@@ -86,6 +105,11 @@ class ExposedDao {
     suspend fun findById(id: String): Any? = TODO()
 }
 val repo = Repo()
+val noteRepository = Repo()
+val tools = Registry()
+class Registry {
+    fun findById(name: String): Any? = TODO()
+}
 val dao = ExposedDao()
 
 object TABLE : Table() {

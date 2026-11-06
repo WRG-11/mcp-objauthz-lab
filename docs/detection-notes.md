@@ -10,13 +10,13 @@ S1/S5 rules miss real-world bugs. They do not. On production-shaped files —
 no toggle, guard simply absent — both fire exactly as designed; the only code
 they go quiet on is a handler where the guard is *written but gated behind a
 runtime toggle*, i.e. this lab's own scaffolding (see the linked README for
-the measured decision and the fixtures pinning it). With S12 and S13
-added, the current measurement against this lab's own source is **7 of the 13
-scenarios flagged (S1, S2, S6, S7, S8, S12, S13)**. The remaining six stay
-quiet: S3-S5 and S9-S11 sit behind a runtime toggle (this lab's own
-scaffolding) or, for S10/S11, a transport-header shape the JS rules match only
-in the language packs — see [`detection/README.md`](../detection/README.md) for
-the per-scenario breakdown and the fixtures pinning it. S9 has no
+the measured decision and the fixtures pinning it). Measured again on
+2026-10-28, a rule reports a line inside the handlers of **9 of the 13
+scenarios (S2, S4, S6, S7, S8, S9, S10, S11, S13)**. The remaining four stay
+quiet: S1, S3, S5 and S12 have their fix in the same handler behind a runtime
+toggle (this lab's own scaffolding). See
+[`detection/README.md`](../detection/README.md) for the per-scenario breakdown,
+the two earlier miscounts it corrects, and the fixtures pinning it. S9 has no
 dedicated rule: the existing `mcp-missing-object-authz-check` (S1's rule)
 already catches its vulnerable shape, since the fix path is a plain
 `$OBJ = store.get...(); ...; return ok($OBJ)` span with no guard call in
@@ -39,5 +39,5 @@ Two rules were hardened in this release against false positives found in a
   comparison. Two-way canary: FIRE on authz bypass, SILENT on markup/UI filter.
 
 Real-capture fixtures from the audit validate both hardenings: `xff-for-logging.js/.py`
-(SILENT), `wildcard-in-markup.js` (SILENT), and `xff-for-ratelimit.js` (FIRE for
-the new S11 rule).
+(SILENT), `wildcard-in-markup.js` (SILENT), and `xff-for-ratelimit.js/.py` (FIRE for
+the new S11 rule and its -py sibling).

@@ -1,0 +1,104 @@
+rules:
+  - id: mcp-client-path-file-read-js
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A caller-named path is resolved and read without a containing-directory check. Confirm that the MCP tool confines reads to its intended root (CWE-22).
+    patterns:
+      - pattern-either:
+          - pattern: |
+              const $ABS = path.resolve($FILEPATH);
+              ...
+              const $DATA = await readFile($ABS);
+          - pattern: |
+              const $ABS = path.resolve($FILEPATH);
+              ...
+              const $DATA = await fs.readFile($ABS);
+      - metavariable-regex:
+          metavariable: $FILEPATH
+          regex: (?i)^(file_?path|input_?path|source_?path)$
+    metadata:
+      cwe: [CWE-22]
+      category: security
+      confidence: LOW
+
+  - id: mcp-client-id-path-write-py
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: A caller-named identifier reaches a filesystem write path. Constrain the final path to an intended directory before writing (CWE-22).
+    pattern-sources:
+      - patterns:
+          - pattern: $ID
+          - metavariable-regex:
+              metavariable: $ID
+              regex: (?i)^(document|paper|resource|file)_?id$
+    pattern-sinks:
+      - patterns:
+          - pattern: open($TARGET, $MODE)
+          - metavariable-regex:
+              metavariable: $MODE
+              regex: ^['"](w|wb|a|ab|x|xb)['"]$
+          - focus-metavariable: $TARGET
+    metadata:
+      cwe: [CWE-22]
+      category: security
+      confidence: LOW
+
+  - id: mcp-dynamic-code-exec-py
+    languages: [python]
+    severity: WARNING
+    message: A variable holding source code reaches exec or eval. Verify that MCP callers cannot choose executable code (CWE-94).
+    patterns:
+      - pattern-either:
+          - pattern: exec($CODE, ...)
+          - pattern: eval($CODE, ...)
+      - metavariable-regex:
+          metavariable: $CODE
+          regex: (?i)^(code|script|expression|source)$
+    metadata:
+      cwe: [CWE-94]
+      category: security
+      confidence: LOW
+
+  - id: mcp-caller-url-http-request-py
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: A caller-named URL component reaches an HTTP request. Validate the final destination and redirects before the request (CWE-918).
+    pattern-sources:
+      - patterns:
+          - pattern: $INPUT
+          - metavariable-regex:
+              metavariable: $INPUT
+              regex: (?i)^(identifier|target|url|endpoint|resource_?url)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CLIENT.get($URL, ...)
+              - pattern: $CLIENT.post($URL, ...)
+          - focus-metavariable: $URL
+    metadata:
+      cwe: [CWE-918]
+      category: security
+      confidence: LOW
+
+  - id: mcp-scheme-only-url-validation-go
+    languages: [go]
+    severity: WARNING
+    message: Accepting a URL because its scheme is HTTP or HTTPS leaves private destinations reachable. Validate resolved addresses and redirects before connecting (CWE-918).
+    patterns:
+      - pattern-inside: |
+          func $FUNC($RAW string) error {
+            ...
+          }
+      - pattern: |
+          switch strings.ToLower($URL.Scheme) {
+          case "http", "https":
+            return nil
+          default:
+            ...
+          }
+    metadata:
+      cwe: [CWE-918]
+      category: security
+      confidence: LOW

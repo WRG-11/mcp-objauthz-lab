@@ -13,7 +13,7 @@ code, not just this lab's.
 scenarios. Twelve of the twenty-one run against **Python as well as
 JavaScript/TypeScript**: three shared rules declare both, and nine `-py`
 siblings carry the shapes whose JavaScript spelling cannot parse as Python
-(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each), for **45 rules across the `detection/semgrep/` directory** — the table lists all of them:
+(`=>` arrows, object literals, `registerTool`/`registerResource` callbacks). Two further files add the Go and Rust language packs (three rules each). Six additional files add Kotlin, Java, Ruby, PHP, C#, and Swift packs (three rules each). Five additional input-to-sink rules cover file paths and outbound URLs, plus dynamic execution, for 50 rules across the `detection/semgrep/` directory. The table lists all of them:
 
 | Rule id | Scenario(s) | Pattern |
 |---|---|---|
@@ -62,6 +62,11 @@ siblings carry the shapes whose JavaScript spelling cannot parse as Python
 | `mcp-authz-scope-from-request-header-swift` | S10 (Swift) | header read via `req.headers["X-Org-Id"]` / `.first` and used to select tenant scope; **WARNING** |
 | `mcp-wildcard-sentinel-scope-bypass-swift` | S4 (Swift) | `"*"`/`"all"` sentinel bypasses scope filtering with no role check; **hardened: requires authz bypass context** |
 | `mcp-unscoped-query-object-fetch-swift` | S7 (Swift) | `find(id)` / `query(\.id == id).first()` with no tenant key; **WARNING** |
+| `mcp-client-path-file-read-js` | CWE-22 (JS/TS) | a caller-named path is resolved and read without a containing-directory check; WARNING, review the path's origin |
+| `mcp-client-id-path-write-py` | CWE-22 (Python) | a caller-named identifier reaches a filesystem write path; WARNING |
+| `mcp-dynamic-code-exec-py` | CWE-94 (Python) | a source-code variable reaches `exec` or `eval`; WARNING |
+| `mcp-caller-url-http-request-py` | CWE-918 (Python) | a caller-named URL component reaches an HTTP request; WARNING |
+| `mcp-scheme-only-url-validation-go` | CWE-918 (Go) | a URL validator accepts HTTP(S) based on scheme alone; WARNING, inspect destination and redirect checks |
 
 ### Go pack
 
@@ -187,16 +192,37 @@ Two ways this was validated, with different outcomes, both worth knowing
 before you rely on it:
 
 **1. Isolated fixture code** ([`semgrep/fixtures/`](semgrep/fixtures/)) — one
-minimal vulnerable snippet and one fixed snippet per rule. **32/32 rules fire
-on the vulnerable snippet and stay silent on the fixed one.** This is the
-correctness bar every rule was iterated against.
+minimal vulnerable snippet and one fixed snippet per rule. An earlier version
+of this page said every rule fires on its vulnerable snippet and stays silent
+on the fixed one. **Measured 2026-10-28, that was not true:** of 45 rules, 13
+fire nowhere in their own fixtures and 5 fire on fewer lines than marked; of
+139 `ruleid:` markers, 70 are not covered by any finding, and 7 of 180 `ok:`
+lines are. The CI count check stayed green throughout because its expected
+total is the number that fires. [`check-annotations.js`](check-annotations.js)
+now checks every marker in CI against
+[`fixture-annotation-baseline.json`](fixture-annotation-baseline.json), which
+lists today's failures one by one: a new failure fails the build, and so does
+a listed one that has been fixed, so the list only shrinks on purpose. Treat
+a rule that appears in the baseline as unproven. As of 2026-10-28 the
+baseline is empty: every marker holds.
 
 **2. This lab's own `src/tools.js`** — the *real* source, where vuln/fixed
 are the same code gated by a runtime `LAB_MODE` toggle (`if (modes.s1 ===
 "fixed") requireOrgAccess(...)`), not two separate files. Running the
-ruleset against it: **7 of 13 scenarios flagged (S1, S2, S6, S7, S8, S12,
-S13). S3-S5 and S9-S11 are missed** — the toggle-gated handlers plus S10/S11's
-transport-header shape, which the JS rules match only in the language packs.
+ruleset against it, measured 2026-10-28 with semgrep 1.182.1 (a scenario
+counts when a rule reports a line inside the handler its toggle gates): **9
+of 13 scenarios flagged (S2, S4, S6, S7, S8, S9, S10, S11, S13). S1, S3, S5
+and S12 are missed.** S1 and S5 have their guard call behind the toggle; S3
+and S12 have their per-item scope filter in the fixed branch of a toggle
+ternary, and the batch rule is silent when such a filter exists. Two earlier
+counts were wrong in opposite
+directions: S1 was counted from a finding on `note_get`, a correctly
+authorized handler (an inline `note.orgId !== session.orgId` check the S1
+rule did not recognize), and S3/S12 were flagged only because the batch rule
+did not recognize a read chained with `.filter(Boolean)`. Both rules are
+fixed. S4, S10 and S11 are new: their rules did not fire on an `if` (S4),
+on the JavaScript header read (S10), or on a header that passes through
+variables and a ternary before it keys the counter (S11) before.
 
 S9 has no dedicated rule. Measured before deciding that: `mcp-missing-
 object-authz-check` (S1's rule) already fires on `note_share_redeem`'s vuln
@@ -243,9 +269,11 @@ pins all of this as fixtures: for S1 and S5 each, a toggle-free vulnerable
 handler (fires), the lab's toggle-guarded spelling (silent, on purpose), and
 an unconditionally-guarded handler (silent).
 
-S2/S3/S4/S6 don't have this problem because their bug is about an
-*unconditional* fallback/sentinel/missing-filter shape, not a conditionally-
-present check call — those rules match the runtime toggle correctly.
+S2/S4/S6 don't have this problem because their bug is about an
+*unconditional* fallback/sentinel shape, not a conditionally-present check —
+those rules match the runtime toggle correctly. S3 and S12 do: their check
+is a filter, and the lab writes it in the fixed branch, so the batch rule
+reads it as present, the same decision as for S1 and S5.
 
 ## A real-world referent — and what it caught the rules missing
 

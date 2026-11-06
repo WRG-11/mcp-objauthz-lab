@@ -4,26 +4,50 @@ rules:
   - csharp
   severity: WARNING
   message: An ASP.NET Core MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the HTTP request and USES IT to select the authorization scope (e.g., passes it to an EF Core query, binds it as OrgId in a Where clause). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-      - pattern: $REQ.Headers[$HDR]
-      - pattern: $REQ.Headers.TryGetValue($HDR, out var $HDRVAL)
-      - pattern: Request.Headers[$HDR]
-      - pattern: Request.Headers.TryGetValue($HDR, out var $HDRVAL)
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)$
-  - pattern-either:
-      - pattern: $REPO.$METHOD(..., $HDRVAL, ...)
-      - pattern: $REPO.Where(x => x.$KEY == $HDRVAL)
-      - pattern: $REPO.FirstOrDefault(x => x.$KEY == $HDRVAL)
-      - pattern: $REPO.SingleOrDefault(x => x.$KEY == $HDRVAL)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(Where|FirstOrDefault|SingleOrDefault|Find|ToList|Select|All).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(OrgId|org_id|TenantId|tenant_id|WorkspaceId|workspace_id|ProjectId|project_id|OrganizationId|organization_id|AccountId|account_id|TeamId|team_id|CustomerId|customer_id)$
+  # Taint mode: the header read and the query are separate statements. The
+  # earlier version put both under one `patterns` (which must match the same
+  # range), compared header names without their quotes, and referenced
+  # $HDRVAL/$KEY that some branches never bound, so it matched nothing. The
+  # finding is reported at the value that selects the scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $R.Headers[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  # TryGetValue hands the header to an `out` variable.
+  - patterns:
+    - pattern-inside: |
+        if ($R.Headers.TryGetValue($HDR, out var $V)) { ... }
+    - pattern: $V
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  # An ASP.NET [FromHeader] parameter is the header value itself.
+  - patterns:
+    - pattern-inside: '$RET $FUNC(..., [FromHeader(Name = $HDR)] $T $P, ...) { ... }'
+    - pattern: $P
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^"(x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)"$
+  pattern-sinks:
+  # A LINQ predicate that compares a scope property with the value, in either
+  # order; the comparison is the sink. ClientIp is the IP-scoping variant of
+  # S10.
+  - patterns:
+    - pattern-either:
+      - pattern: $X.$KEY == $V
+      - pattern: $V == $X.$KEY
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: ^(OrgId|TenantId|WorkspaceId|ProjectId|OrganizationId|AccountId|TeamId|CustomerId|ClientIp)$
+  # A finder by key; the call is the sink.
+  - patterns:
+    - pattern: $R.$FIND($V, ...)
+    - metavariable-regex:
+        metavariable: $FIND
+        regex: ^(Find|FindAsync)$
   metadata:
     cwe:
     - CWE-639
@@ -39,30 +63,63 @@ rules:
   - csharp
   severity: ERROR
   message: A magic "all" or "*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*" or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit RequireAdminRole()-style check, not on the parameter's literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  # The earlier version matched the comparison and then required the same
+  # range to be a whole `if ($PARAM == "*") { ... }`. A comparison is never
+  # a whole `if`, so `a || b` never fired, any call in the body counted (a
+  # logging call fired), and there was no admin-role guard. The `if` form now
+  # reports the whole statement, searches its condition, and requires its
+  # body to widen the read: a whole-table EF load (`db.Notes.ToListAsync()`,
+  # no `Where` in between) or a list-all call.
   patterns:
   - pattern-either:
-      - pattern: $PARAM == "*"
-      - pattern: $PARAM == "all"
-      - pattern: '"*" == $PARAM'
-      - pattern: '"all" == $PARAM'
-  - metavariable-regex:
-      metavariable: $PARAM
-      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-  - pattern-either:
+    - patterns:
       - pattern: |
-          if ($PARAM == "*") {
-            ...
-            $REPO.$METHOD(...);
-            ...
-          }
-      - pattern: |
-          if ($PARAM == "all") {
-            ...
-            $REPO.$METHOD(...);
-            ...
-          }
-      - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
-      - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+          if ($COND) { ... }
+      - metavariable-pattern:
+          metavariable: $COND
+          patterns:
+          - pattern-either:
+            - pattern: $PARAM == "*"
+            - pattern: $PARAM == "all"
+            - pattern: '"*" == $PARAM'
+            - pattern: '"all" == $PARAM'
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      - pattern-either:
+        - patterns:
+          - pattern: |
+              if ($COND) { ... <... $CTX.$SET.$LOAD() ...>; ... }
+          - metavariable-regex:
+              metavariable: $LOAD
+              regex: ^(ToListAsync|ToList|ToArrayAsync|ToArray)$
+        - patterns:
+          - pattern: |
+              if ($COND) { ... <... $REPO.$METHOD(...) ...>; ... }
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: (?i)^(listAll|getAll|findAll|selectAll|all$)
+    - patterns:
+      - pattern-either:
+        - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
+      - metavariable-regex:
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      - metavariable-pattern:
+          metavariable: $WIDE
+          patterns:
+          - pattern: $X
+          - pattern-not: '"..."'
+  - pattern-not-inside: |
+      RequireAdminRole(...);
+      ...
+  - pattern-not-inside: |
+      CheckAdminRole(...);
+      ...
+  - pattern-not-inside: |
+      AssertAdminRole(...);
+      ...
   metadata:
     cwe:
     - CWE-639
@@ -76,20 +133,45 @@ rules:
   - csharp
   severity: WARNING
   message: An object is fetched by id through a query that carries no tenant key (WorkspaceId / ProjectId / OrganizationId / OrgId / TenantId / AccountId / UserId / OwnerId). If the entity is multi-tenant, any caller's id resolves regardless of tenant -- the query-scoped form of BOLA/IDOR, CWE-639. Bind the tenant key into the same filter, sourced from the session. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s7--unscoped-query
+  # The earlier version applied `metavariable-regex: $REPO` to the whole rule.
+  # The DbContext branches never bind $REPO, and `_context.Notes` does not end
+  # in Repository/DbSet/DbContext, so the rule matched nothing. Each branch
+  # now carries its own filter. A lambda that also compares a tenant key
+  # (`n.Id == id && n.OrgId == org`) is not `$X.Id == $ID` and stays silent.
+  #
+  # The id must come from the caller: a parameter of a public method, or
+  # an expression built from one (`dto.Id`, `new Guid(dto.Key)`). Measured on
+  # real clones, most id-only fetches take a server-side id (a claim, the
+  # user's profile, a row just created, a foreign key of a loaded row); those
+  # are not S7. A private helper that receives a loaded entity is skipped too.
   patterns:
+  - pattern-inside: |
+      public $RET $M(..., $PT $P, ...) { ... }
   - pattern-either:
-      - pattern: (await $CTX.$SET.FindAsync($ID))
-      - pattern: (await $CTX.FindAsync<$T>($ID))
-      - pattern: (await $CTX.$SET.FirstOrDefaultAsync($X => $X.Id == $ID))
-      - pattern: (await $CTX.$SET.SingleOrDefaultAsync($X => $X.Id == $ID))
-      - pattern: $REPO.Find($ID)
-      - pattern: $REPO.FindAsync($ID)
-      - pattern: $REPO.FirstOrDefault(x => x.Id == $ID)
-      - pattern: $REPO.SingleOrDefault(x => x.Id == $ID)
-  - pattern-not: (await $CTX.$SET.FirstOrDefaultAsync($X => ... && $X.$TENANT == $T))
-  - metavariable-regex:
-      metavariable: $REPO
-      regex: .*Repository|.*DbSet|.*DbContext
+    - patterns:
+      - pattern: $CTX.$SET.$FIND($ID)
+      - metavariable-regex:
+          metavariable: $FIND
+          regex: ^Find(Async)?$
+    - pattern: $CTX.FindAsync<$T>($ID)
+    - patterns:
+      - pattern: $CTX.$SET.$FIRST($X => $X.Id == $ID)
+      - metavariable-regex:
+          metavariable: $FIRST
+          regex: ^(First|Single)(OrDefault)?(Async)?$
+    - patterns:
+      - pattern: $REPO.$FIND($ID)
+      - metavariable-regex:
+          metavariable: $FIND
+          regex: ^Find(Async)?$
+      - metavariable-regex:
+          metavariable: $REPO
+          regex: (?i)^_?\w*repo(sitory)?$
+  - metavariable-pattern:
+      metavariable: $ID
+      pattern-either:
+      - pattern: $P
+      - pattern: $P.$F
   metadata:
     cwe:
     - CWE-639

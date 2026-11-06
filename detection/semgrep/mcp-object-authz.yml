@@ -305,6 +305,63 @@ rules:
       ...
 
       '
+  # The check written inline instead of as a guard call: an `if` whose
+  # condition compares the same key on the object and on the session
+  # (`note.orgId !== session.orgId`). Before, only guard calls counted, so the
+  # lab's own correctly authorized note_get was reported. The body of the `if`
+  # is not checked; a comparison of the two scope keys is taken as the check.
+  # There is one form per operator and operand order, for each of the two
+  # ranges the rule reports (from the session, and from the object). The
+  # rule's patterns parse as JavaScript (a Python-only pattern is a parse
+  # error), and the `!=` forms also match Python's `if a.k != b.k:`.
+  - pattern-not: |
+      $SESSION = $RESOLVE(...);
+      ...
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $OBJ.$K !== $SESSION.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $OBJ.$K !== $SESSION.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $SESSION = $RESOLVE(...);
+      ...
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $OBJ.$K != $SESSION.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $OBJ.$K != $SESSION.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $SESSION = $RESOLVE(...);
+      ...
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $SESSION.$K !== $OBJ.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $SESSION.$K !== $OBJ.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $SESSION = $RESOLVE(...);
+      ...
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $SESSION.$K != $OBJ.$K ...>) $THEN;
+      ...
+  - pattern-not: |
+      $OBJ = $STORE.$GETMETHOD($ID);
+      ...
+      if (<... $SESSION.$K != $OBJ.$K ...>) $THEN;
+      ...
   metadata:
     cwe:
     - CWE-639
@@ -345,46 +402,56 @@ rules:
   message: A magic "all"/*" sentinel value on a scope parameter is honored in an AUTHORIZATION CONTEXT (it controls whether to widen scope and return all tenants' data) without a role check. A textual "*"
     or "all" comparison in markup rendering, UI filters, or logging is NOT an authz decision and must stay silent. Gate wildcard scope on an explicit requireAdminRole()-style check, not on the parameter's
     literal value. CWE-639 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s4--wildcardsentinel-bypass
+  # The comparison must be the condition of an `if` whose body widens the
+  # read (a listAll/getAll/findAll call), or a ternary whose wide branch is
+  # not a string literal. The earlier version matched the comparison and the
+  # widening call as two separate ranges; the two never overlap (one is in
+  # the condition, the other in the body), so no `if` ever fired, in
+  # JavaScript or in Python. The `if` form now reports the whole statement.
+  # The same pattern matches a Python `if`, so the rule covers it without a
+  # separate sibling.
   patterns:
   - pattern-either:
-    - pattern: $PARAM === "*"
-    - pattern: $PARAM === "all"
-    - pattern: $PARAM == "*"
-    - pattern: $PARAM == "all"
-  - metavariable-regex:
-      metavariable: $PARAM
-      regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
-  - pattern-either:
     - patterns:
-      - pattern: if ($PARAM === "*") { ... }
+      - pattern: |
+          if ($COND) { ... }
+      - metavariable-pattern:
+          metavariable: $COND
+          patterns:
+          - pattern-either:
+            - pattern: $PARAM === "*"
+            - pattern: $PARAM === "all"
+            - pattern: $PARAM == "*"
+            - pattern: $PARAM == "all"
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
       - pattern-either:
-        - pattern: $STORE.$METHOD()
-        - pattern: return $STORE.$METHOD()
+        - pattern: |
+            if ($COND) { ... <... $STORE.$METHOD(...) ...>; ... }
+        - pattern: |
+            if ($COND) { ... <... $METHOD(...) ...>; ... }
       - metavariable-regex:
           metavariable: $METHOD
-          regex: (?i)^(listAll|all|getAll|findAll|selectAll).*
+          regex: (?i)^(listAll|getAll|findAll|selectAll|list_all|get_all|find_all|select_all|all$)
     - patterns:
-      - pattern: if ($PARAM === "*") { ... }
       - pattern-either:
-        - pattern: $FUNC()
-        - pattern: return $FUNC()
+        - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
+        - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
       - metavariable-regex:
-          metavariable: $FUNC
-          regex: (?i).*(all|every|global|unscoped).*
-    - pattern: '$PARAM === "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM === "all" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM == "*" ? $WIDE : $SCOPED'
-    - pattern: '$PARAM == "all" ? $WIDE : $SCOPED'
-    - patterns:
-      - pattern: if ($PARAM === "*") { ... }
-      - pattern-not: 'if ($PARAM === "*") { ... }
-
-          ...
-
-          $STORE.$METHOD({ ..., $KEY: $SESSION_ORG, ... })'
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+          metavariable: $PARAM
+          regex: (?i).*(scope|org|tenant|project|team|workspace|account|user|owner|group|realm|namespace).*
+      # A ternary whose wide branch is a string literal picks a label or a CSS
+      # class, it widens nothing. Real-capture FP: a UI filter button rendered
+      # with `scope === 'all' ? 'active' : ''` (wildcard-in-markup.js).
+      - metavariable-pattern:
+          metavariable: $WIDE
+          patterns:
+          - pattern: $X
+          - pattern-not: "'...'"
+          - pattern-not: '"..."'
   - pattern-not-inside: 'requireAdminRole(...);
 
       ...'
@@ -425,13 +492,21 @@ rules:
   - metavariable-regex:
       metavariable: $STORE
       regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
-  - pattern-not-inside: '$RESOLVED = $IDS.map($F => $STORE.$METHOD($F));
-
+  # Silent only when a later filter compares the same key on the item and on
+  # the caller's side (`n.orgId === session.orgId`). The earlier version
+  # needed the read to be exactly `x = ids.map(...)`, so `ids.map(...)
+  # .filter(Boolean)` fired even with the scope filter after it, and any later
+  # `.filter(...)`, such as one dropping missing ids, silenced it.
+  - pattern-not-inside: |
+      $RESOLVED = <... $IDS.map($F => $STORE.$METHOD($F)) ...>;
       ...
-
-      $RESOLVED.filter(...);
-
-      '
+      $RESOLVED.filter($N => $N.$K === $S.$K);
+  - pattern-not-inside: |
+      $RESOLVED = <... $IDS.map($F => $STORE.$METHOD($F)) ...>;
+      ...
+      $RESOLVED.filter($N => $N.$K == $S.$K);
+  - pattern-not-inside: $IDS.map($F => $STORE.$METHOD($F)).filter($N => $N.$K === $S.$K)
+  - pattern-not-inside: $IDS.map($F => $STORE.$METHOD($F)).filter($N => $N.$K == $S.$K)
   metadata:
     cwe:
     - CWE-862
@@ -572,21 +647,47 @@ rules:
     CWE-862). Filter resolved items by the session''s scope before returning them. See https://github.com/WRG-11/mcp-objauthz-lab#scenario-s3--listget-asymmetry
 
     '
+  # The comprehension itself is the match. An earlier version matched only
+  # `x = [...]`, so a handler that returns the comprehension directly (the
+  # fixture's positive) was never reported, and the rule fired nowhere.
   patterns:
-  - pattern: $RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
+  # The ids are client-supplied: a parameter of the handler, or a field of
+  # one (`args.ids`). Ids the server derived itself are not this case.
+  # (A `def` pattern also matches `async def`.)
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          def $FUNC(..., $IDS, ...):
+            ...
+      - pattern: '[$CALL for $F in $IDS]'
+    - patterns:
+      - pattern-inside: |
+          def $FUNC(..., $P, ...):
+            ...
+      - pattern: '[$CALL for $F in $P.$FIELD]'
+  - metavariable-pattern:
+      metavariable: $CALL
+      patterns:
+      - pattern: $STORE.$METHOD($F)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i)^(get|find)[A-Za-z0-9_]+$
+      - metavariable-regex:
+          metavariable: $STORE
+          regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
+  # Semgrep resolves an imported function (`from m import get_x`) to `m.get_x`,
+  # so a plain function call also matches `$STORE.$METHOD`. Require a dot in
+  # the source text of the callee.
   - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(get|find)[A-Za-z0-9_]+$
-  - metavariable-regex:
-      metavariable: $STORE
-      regex: ^(?!.*(?i)(map|cache|memo|index)$).*$
-  - pattern-not-inside: '$RESOLVED = [$STORE.$METHOD($F) for $F in $IDS]
-
+      metavariable: $CALL
+      regex: ^[^(]*\.
+  # A per-item scope filter after the batch fetch: assigned then filtered,
+  # or filtered in an enclosing comprehension.
+  - pattern-not-inside: |
+      $RESOLVED = [$X for $Y in $Z]
       ...
-
       [$N for $N in $RESOLVED if ...]
-
-      '
+  - pattern-not-inside: '[$N for $N in [$X for $Y in $Z] if ...]'
   metadata:
     cwe:
     - CWE-862
@@ -607,6 +708,14 @@ rules:
   - metavariable-regex:
       metavariable: $FUNC
       regex: (?i).*admin.*
+  # Only a tool registration counts. Any other decorator (a typer/click CLI
+  # command, a route) is not reachable through an MCP call. Real-capture FP:
+  # a loopback-only `@app.command() def admin(...)` in an MCP server repo.
+  - metavariable-pattern:
+      metavariable: $DEC
+      pattern-either:
+      - pattern: $X.tool
+      - pattern: $X.tool(...)
   - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    require_admin_role(...)\n    ...\n"
   - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    check_admin_role(...)\n    ...\n"
   - pattern-not-inside: "@$DEC\ndef $FUNC(...):\n    ...\n    assert_admin_role(...)\n    ...\n"
@@ -647,6 +756,50 @@ rules:
           patterns:
           - pattern-not: "'...'"
           - pattern-not: '"..."'
+    # SQLAlchemy 2.0: select(Model).where(Model.id == x). Reported only inside
+    # a route handler whose parameter is the id. A service function's id comes
+    # from a caller that may have checked it already; on one real FastAPI
+    # server the unrestricted shape fired 72 times for 3 real bugs, and 6
+    # times with these filters. Silent when the same query also filters by a
+    # tenant or owner key, or when the id is passed to a check call (a name
+    # with require/check/verify/ensure/assert/authoriz/permission/membership/
+    # can_) earlier in the handler.
+    - patterns:
+      # `def` also matches `async def`.
+      - pattern-inside: |
+          @$R.$VERB(...)
+          def $F(..., $ID: $T, ...):
+            ...
+      - metavariable-regex:
+          metavariable: $VERB
+          regex: ^(get|post|put|patch|delete|api_route)$
+      - pattern-either:
+        - pattern: select($M).where($M.id == $ID)
+        - pattern: select($M).where($ID == $M.id)
+      - pattern-not:
+          patterns:
+          - pattern-either:
+            - pattern: select($M).where($M.id == $ID)
+            - pattern: select($M).where($ID == $M.id)
+          - pattern-either:
+            - pattern-inside: $C.where($M2.$KEY == $V)
+            - pattern-inside: $C.where($V == $M2.$KEY)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i)^(workspace_id|project_id|organization_id|org_id|tenant_id|account_id|user_id|owner_id|team_id|realm_id|namespace_id|created_by|creator_id)$
+      - pattern-not:
+          patterns:
+          - pattern-either:
+            - pattern: select($M).where($M.id == $ID)
+            - pattern: select($M).where($ID == $M.id)
+          # The call form also matches the call under `await` and on the
+          # right of an assignment.
+          - pattern-inside: |
+              $CHECK(..., $ID, ...)
+              ...
+          - metavariable-regex:
+              metavariable: $CHECK
+              regex: (?i).*(require|check|verify|ensure|assert|authoriz|permission|membership|can_).*
   metadata:
     cwe:
     - CWE-639
@@ -753,24 +906,52 @@ rules:
   message: An MCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) from the transport request and USES IT to select the authorization scope (e.g., passes it to a store list call, binds
     it as orgId in a query). A request header is entirely client-controlled -- any caller sets it -- so it must never decide whose data a tool returns. Over the streamable-HTTP transport this value arrives
     in extra.requestInfo.headers; derive the scope from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-    - pattern: $HDRVAL = $E.requestInfo.headers[$HDR]
-    - pattern: $HDRVAL = $E.requestInfo.headers.get($HDR)
-    - pattern: $HDRVAL = $REQ.headers[$HDR]
-    - pattern: $HDRVAL = $REQ.headers.get($HDR)
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
-  - pattern-either:
-    - pattern: $STORE.$METHOD(..., $HDRVAL, ...)
-    - pattern: '$STORE.$METHOD({ ..., $KEY: $HDRVAL, ... })'
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(list|find|get|search|query|select).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+  # Taint mode: the header read and the scoping call are separate statements,
+  # often with an intermediate variable or a fallback in between. A `patterns`
+  # block cannot express that (every positive pattern must match the same
+  # range), and the earlier version of this rule fired nowhere in its fixture.
+  # The finding is reported at the sink: the argument that selects the scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    # $REQ also binds `extra.requestInfo`, so the MCP transport spelling
+    # (extra.requestInfo.headers[...]) is covered by the same forms. Semgrep
+    # matches `a?.b?.[x]` with `a.b[x]`, but not `a?.b?.get(x)` with
+    # `a.b.get(x)`, so only the call form needs an optional-chained copy.
+    - pattern-either:
+      - pattern: $REQ.headers[$HDR]
+      - pattern: $REQ.headers.get($HDR)
+      - pattern: $REQ?.headers?.get($HDR)
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  pattern-sinks:
+  # Quota and rate-limit calls are left to mcp-ratelimit-scope-from-forwarded-header
+  # (S11), which reports the same header there; both sinks skip them.
+  # A positional argument of a scoping call. Object-literal arguments are left
+  # to the next sink, which only accepts a scope-named key.
+  - patterns:
+    - pattern: $STORE.$METHOD(..., $ARG, ...)
+    # The Headers accessor is a get* call too: without this, every
+    # `headers.get("x-org-id")` read reports itself.
+    - pattern-not: $REQ.headers.get(...)
+    - pattern-not: $REQ?.headers?.get(...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $ARG
+        regex: ^[^{]
+    - focus-metavariable: $ARG
+  - patterns:
+    - pattern: '$STORE.$METHOD({ ..., $KEY: $VAL, ... })'
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i)^(orgId|org_id|tenantId|tenant_id|workspaceId|workspace_id|projectId|project_id|organizationId|organization_id|accountId|account_id|teamId|team_id|customerId|customer_id)$
+    - focus-metavariable: $VAL
   metadata:
     cwe:
     - CWE-639
@@ -786,22 +967,54 @@ rules:
   message: A FastMCP tool reads a tenant/identity header (X-Org-Id, X-Forwarded-For, ...) via get_http_headers() and USES IT to select the authorization scope (e.g., passes it to a store list call, binds
     it as org_id in a query). A request header is entirely client-controlled, so it must never decide whose data a tool returns; derive the scope from the server-trusted session instead. CWE-639/CWE-290
     -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s10--forwarded-header-as-scope
-  patterns:
-  - pattern-either:
-    - pattern: $HDRVAL = $H.get($HDR)
-    - pattern: $HDRVAL = $H[$HDR]
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
-  - pattern-either:
-    - pattern: $STORE.$METHOD(..., $HDRVAL, ...)
-    - pattern: $STORE.$METHOD(..., $KEY = $HDRVAL, ...)
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i)^(list|find|get|search|query|select).*
-  - metavariable-regex:
-      metavariable: $KEY
-      regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+  # Taint mode, for the same reason as the JavaScript rule: the header read
+  # and the scoping call are separate statements, which one `patterns` block
+  # cannot match. The finding is reported at the argument that selects the
+  # scope.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $H.get($HDR)
+      - pattern: $H[$HDR]
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-org-id|x-org|x-tenant-id|x-tenant|x-workspace-id|x-account-id|x-customer-id|x-project-id|x-user-id|x-forwarded-for|x-real-ip|x-client-ip)["']$
+  # Quota and rate-limit calls are left to
+  # mcp-ratelimit-scope-from-forwarded-header-py (S11).
+  pattern-sinks:
+  # A positional argument of a scoping call. Dict literals go to the next
+  # sink, which only accepts a scope-named key.
+  - patterns:
+    - pattern: $STORE.$METHOD(..., $ARG, ...)
+    # The header accessor is a get* call with a string literal: without this,
+    # every headers.get("x-org-id") read reports itself.
+    - pattern-not: $X.get("...")
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $ARG
+        regex: ^[^{]
+    - focus-metavariable: $ARG
+  - patterns:
+    - pattern: '$STORE.$METHOD(..., {..., $K: $VAL, ...}, ...)'
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $K
+        regex: (?i)^["'](org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)["']$
+    - focus-metavariable: $VAL
+  - patterns:
+    - pattern: $STORE.$METHOD(..., $KEY=$VAL, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i)^(?!.*(quota|rate_?limit))(list|find|get|search|query|select).*
+    - metavariable-regex:
+        metavariable: $KEY
+        regex: (?i)^(org_id|tenant_id|workspace_id|project_id|organization_id|account_id|team_id|customer_id)$
+    - focus-metavariable: $VAL
   metadata:
     cwe:
     - CWE-639
@@ -818,262 +1031,30 @@ rules:
   message: An MCP tool reads a client-identity header (X-Forwarded-For, X-Real-IP, X-Client-IP, ...) from the transport request and USES IT as the key for a quota or rate-limit counter. A request header
     is entirely client-controlled -- any caller sets it -- so it must never decide which client's quota to check. Over the streamable-HTTP transport this value arrives in extra.requestInfo.headers; derive
     the quota key from the server-trusted session instead. CWE-639/CWE-290 -- see https://github.com/WRG-11/mcp-objauthz-lab#scenario-s11--xff-quota-bypass
-  patterns:
-  - pattern-either:
-    # Assignment with nullish coalescing + call statement
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers[$HDR] ?? $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers?.get($HDR) ?? $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers[$HDR] ?? $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers?.get($HDR) ?? $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    # Assignment with logical OR + call statement
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers[$HDR] || $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers?.get($HDR) || $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers[$HDR] || $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers?.get($HDR) || $FALLBACK;
-          ...
-          $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    # Assignment with nullish coalescing + if with call
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers[$HDR] ?? $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers?.get($HDR) ?? $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers[$HDR] ?? $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers?.get($HDR) ?? $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    # Assignment with logical OR + if with call
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers[$HDR] || $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers?.get($HDR) || $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers[$HDR] || $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers?.get($HDR) || $FALLBACK;
-          ...
-          if ($STORE.$METHOD(..., $HDRVAL, ...)) ...
-          ...
-        }
-    # Assignment with nullish coalescing + variable declaration with call initializer
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers[$HDR] ?? $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers?.get($HDR) ?? $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers[$HDR] ?? $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers?.get($HDR) ?? $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    # Assignment with logical OR + variable declaration with call initializer
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers[$HDR] || $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $E?.requestInfo?.headers?.get($HDR) || $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers[$HDR] || $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $HDRVAL = $REQ?.headers?.get($HDR) || $FALLBACK;
-          ...
-          const $X = $STORE.$METHOD(..., $HDRVAL, ...);
-          ...
-        }
-    # Direct use in store call (object property)
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD({ ..., $KEY: $E?.requestInfo?.headers[$HDR], ... });
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD({ ..., $KEY: $E?.requestInfo?.headers?.get($HDR), ... });
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD({ ..., $KEY: $REQ?.headers[$HDR], ... });
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD({ ..., $KEY: $REQ?.headers?.get($HDR), ... });
-          ...
-        }
-    # Direct use in store call (positional argument)
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD(..., $E?.requestInfo?.headers[$HDR], ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD(..., $E?.requestInfo?.headers?.get($HDR), ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD(..., $REQ?.headers[$HDR], ...);
-          ...
-        }
-    - pattern: |
-        async function $FUNC(...) {
-          ...
-          $STORE.$METHOD(..., $REQ?.headers?.get($HDR), ...);
-          ...
-        }
-  - metavariable-regex:
-      metavariable: $HDR
-      regex: (?i)^["'](x-forwarded-for|x-real-ip|x-client-ip|x-forwarded|x-cluster-client-ip)["']$
-  - metavariable-regex:
-      metavariable: $METHOD
-      regex: (?i).*(quota|ratelimit|rate_limit|limit|throttle|bucket).*
+  # Taint mode: the header value may pass through variables, a fallback and a
+  # ternary before it keys the counter (this lab's own S11 handler does all
+  # three). The earlier version matched one statement shape, a header read
+  # stored with a fallback and then passed on, and missed that flow.
+  #
+  # A pattern written with `?.` does not match code without it, but
+  # `$REQ.headers[$HDR]` also matches `x?.headers?.[...]`. For a call the two
+  # are separate: `.get(...)` and `?.get(...)` each need a source.
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.headers[$HDR]
+      - pattern: $REQ.headers.get($HDR)
+      - pattern: $REQ.headers?.get($HDR)
+    - metavariable-regex:
+        metavariable: $HDR
+        regex: (?i)^["'](x-forwarded-for|x-real-ip|x-client-ip|x-forwarded|x-cluster-client-ip)["']$
+  pattern-sinks:
+  - patterns:
+    - pattern: $STORE.$METHOD(...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (?i).*(quota|ratelimit|rate_limit|limit|throttle|bucket).*
   metadata:
     cwe:
     - CWE-639
@@ -1096,28 +1077,28 @@ rules:
           ...
           $HDRVAL = $H.get($HDR) or $FALLBACK
           ...
-          $STORE.$METHOD(..., $HDRVAL, ...)
+          <... $STORE.$METHOD(..., $HDRVAL, ...) ...>
           ...
     - pattern: |
         def $FUNC(...):
           ...
           $HDRVAL = $H[$HDR] or $FALLBACK
           ...
-          $STORE.$METHOD(..., $HDRVAL, ...)
+          <... $STORE.$METHOD(..., $HDRVAL, ...) ...>
           ...
     - pattern: |
         async def $FUNC(...):
           ...
           $HDRVAL = $H.get($HDR) or $FALLBACK
           ...
-          $STORE.$METHOD(..., $HDRVAL, ...)
+          <... $STORE.$METHOD(..., $HDRVAL, ...) ...>
           ...
     - pattern: |
         async def $FUNC(...):
           ...
           $HDRVAL = $H[$HDR] or $FALLBACK
           ...
-          $STORE.$METHOD(..., $HDRVAL, ...)
+          <... $STORE.$METHOD(..., $HDRVAL, ...) ...>
           ...
     # Direct use in call
     - pattern: |

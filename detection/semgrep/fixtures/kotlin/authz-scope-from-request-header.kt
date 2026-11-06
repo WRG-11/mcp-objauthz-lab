@@ -24,18 +24,25 @@
 import io.ktor.server.request.*
 import io.ktor.http.*
 
-// FIRE: call.request.header(MCP_SESSION_ID_HEADER) → getTransport(...) — CANONICAL S10
-suspend fun noteGetScopedCanonicalVuln(call: ApplicationCall, token: String) {
+// The rule is a taint rule, so a finding sits on the SINK: the scoping call.
+// `ruleid:` markers are above that call.
+
+// OK: Mcp-Session-Id routes the request to its transport. It is the MCP
+// session handle, unguessable and issued by the server, not a client-chosen
+// tenant scope, and it is outside the rule's header list. (Marked `ruleid`
+// before, which contradicted the rule.)
+suspend fun transportBySessionId(call: ApplicationCall, token: String) {
     val session = resolveSession(token)
-    // ruleid: mcp-authz-scope-from-request-header-kotlin
+    // ok: mcp-authz-scope-from-request-header-kotlin
     val sessionId = call.request.header("Mcp-Session-Id")
     return transportManager.getTransport(sessionId)
 }
 
-// FIRE: call.request.header("Authorization"|"x-api-key"|"Origin"|"Host") → auth/validation decision
-suspend fun noteGetScopedAuthVuln(call: ApplicationCall, token: String) {
+// OK: a bearer token checked by the server is authentication, not a
+// client-chosen scope. (Marked `ruleid` before.)
+suspend fun authenticateWithBearer(call: ApplicationCall, token: String) {
     val session = resolveSession(token)
-    // ruleid: mcp-authz-scope-from-request-header-kotlin
+    // ok: mcp-authz-scope-from-request-header-kotlin
     val authHeader = call.request.header("Authorization")?.removePrefix("Bearer ")
     return repo.authenticate(authHeader)
 }
@@ -43,32 +50,32 @@ suspend fun noteGetScopedAuthVuln(call: ApplicationCall, token: String) {
 // FIRE: header value used to select org scope in a repository call (authz decision)
 suspend fun noteGetScopedVuln(call: ApplicationCall, token: String) {
     val session = resolveSession(token)
-    // ruleid: mcp-authz-scope-from-request-header-kotlin
     val headerOrg = call.request.headers["x-org-id"] ?: session.orgId
+    // ruleid: mcp-authz-scope-from-request-header-kotlin
     return repo.listNotesByOrg(headerOrg)
 }
 
 // FIRE: call.request.header() form with authz decision
 suspend fun noteGetScopedHeaderVuln(call: ApplicationCall, token: String) {
     val session = resolveSession(token)
-    // ruleid: mcp-authz-scope-from-request-header-kotlin
     val headerOrg = call.request.header("x-org-id") ?: session.orgId
+    // ruleid: mcp-authz-scope-from-request-header-kotlin
     return repo.listNotesByOrg(headerOrg)
 }
 
 // FIRE (IP-scoping variant): X-Forwarded-For used to select client IP scope
 suspend fun noteGetScopedByIpVuln(call: ApplicationCall, token: String) {
     val session = resolveSession(token)
-    // ruleid: mcp-authz-scope-from-request-header-kotlin
     val fwd = call.request.headers["x-forwarded-for"] ?: session.clientIp
+    // ruleid: mcp-authz-scope-from-request-header-kotlin
     return repo.listNotesForClientIp(fwd)
 }
 
 // FIRE: header used directly as orgId in a query filter (authz decision)
 suspend fun noteGetByQueryVuln(call: ApplicationCall, token: String, id: String) {
     val session = resolveSession(token)
-    // ruleid: mcp-authz-scope-from-request-header-kotlin
     val headerOrg = call.request.headers["x-org-id"] ?: session.orgId
+    // ruleid: mcp-authz-scope-from-request-header-kotlin
     return repo.findNoteBy(id = id, orgId = headerOrg)
 }
 
@@ -109,6 +116,45 @@ suspend fun logTracing(call: ApplicationCall) {
     val ua = call.request.headers["User-Agent"]
     val event = call.request.header("X-GitHub-Event")
     logger.info { "tracing realIp=$realIp ua=$ua event=$event" }
+}
+
+// FIRE: Spring @RequestHeader parameter feeding a scoping call.
+fun projectListVuln(@RequestHeader("X-Tenant-Id") tenant: String): List<Project> {
+    // ruleid: mcp-authz-scope-from-request-header-kotlin
+    return repo.findProjects(tenant)
+}
+
+// OK (legitimate neighbor): a correlation header passed to a list call is not
+// a scope. Pins the header-name regex of the Ktor source.
+suspend fun listByRequestId(call: ApplicationCall) {
+    val reqId = call.request.headers["x-request-id"]
+    // ok: mcp-authz-scope-from-request-header-kotlin
+    return repo.listAuditEvents(reqId)
+}
+
+// OK: the same through @RequestHeader. Pins its header-name regex.
+fun listByRequestIdSpring(@RequestHeader("X-Request-Id") reqId: String) {
+    // ok: mcp-authz-scope-from-request-header-kotlin
+    return repo.listAuditEvents(reqId)
+}
+
+// OK: the client IP is recorded, not used to choose whose data is returned.
+// Pins the scoping-method regex.
+suspend fun recordClientIp(call: ApplicationCall, token: String) {
+    val session = resolveSession(token)
+    val clientIp = call.request.header("x-forwarded-for")
+    // ok: mcp-authz-scope-from-request-header-kotlin
+    repo.recordAccess(clientIp)
+    return repo.listNotesByOrg(session.orgId)
+}
+
+// OK: a quota lookup keyed on the forwarded header is S11, not S10.
+suspend fun quotaByForwardedIp(call: ApplicationCall, token: String) {
+    val session = resolveSession(token)
+    val fwd = call.request.header("x-forwarded-for")
+    // ok: mcp-authz-scope-from-request-header-kotlin
+    if (repo.getQuotaCount(fwd) >= 10) throw IllegalStateException("quota")
+    return repo.listNotesByOrg(session.orgId)
 }
 
 fun resolveSession(token: String): Session = TODO()

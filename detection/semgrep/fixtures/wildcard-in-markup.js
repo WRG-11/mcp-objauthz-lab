@@ -36,3 +36,11 @@ function searchFilterResults(results, query) {
   }
   return results.filter((r) => r.name.includes(query));
 }
+
+function renderScopeToolbar(state) {
+  // Real capture (a scanned MCP repo's web UI): the comparison picks a CSS class
+  // for the active filter button. Both ternary branches are string literals, so
+  // nothing is widened -- markup, not an authorization decision.
+  // ok: mcp-wildcard-sentinel-scope-bypass
+  return `<button class="${state.componentsScope === 'all' ? 'active' : ''}" data-scope="all">All</button>`;
+}

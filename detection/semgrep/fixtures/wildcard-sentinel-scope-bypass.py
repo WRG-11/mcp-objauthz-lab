@@ -75,3 +75,43 @@ def log_scope_value(scope):
     # ok: mcp-wildcard-sentinel-scope-bypass
     if scope == "*":
         logger.info("wildcard scope requested")
+
+
+async def vuln_export_ternary_all(store, token, tenant):
+    session = resolve_session(store, token)
+    # ruleid: mcp-wildcard-sentinel-scope-bypass
+    return ok(store.list_all_notes() if tenant == "all" else store.list_notes_by_org(session.org_id))
+
+
+async def fixed_export_checked(store, token, org_id):
+    session = resolve_session(store, token)
+    check_admin_role(session)
+    # ok: mcp-wildcard-sentinel-scope-bypass
+    if org_id == "*":
+        return ok(store.list_all_notes())
+    return ok(store.list_notes_by_org(session.org_id))
+
+
+async def fixed_export_asserted(store, token, org_id):
+    session = resolve_session(store, token)
+    assert_admin_role(session)
+    # ok: mcp-wildcard-sentinel-scope-bypass
+    if org_id == "*":
+        return ok(store.list_all_notes())
+    return ok(store.list_notes_by_org(session.org_id))
+
+
+async def vuln_export_star(store, token, org_id):
+    session = resolve_session(store, token)
+    # ruleid: mcp-wildcard-sentinel-scope-bypass
+    if org_id == "*":
+        return ok(store.list_all_notes())
+    return ok(store.list_notes_by_org(session.org_id))
+
+
+async def vuln_export_all(store, token, tenant):
+    session = resolve_session(store, token)
+    # ruleid: mcp-wildcard-sentinel-scope-bypass
+    if tenant == "all":
+        return ok(store.list_all_notes())
+    return ok(store.list_notes_by_org(session.org_id))
