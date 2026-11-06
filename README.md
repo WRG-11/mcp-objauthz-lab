@@ -78,7 +78,7 @@ Requirements: Node.js 20 or later.
 
 ```bash
 npm install
-npm test    # 90 tests: unit, docs-consistency, CI-hardening, PoC-output and fixture-annotation checks
+npm test    # 92 tests: unit, docs-consistency, CI-hardening, PoC-output and fixture-annotation checks
 npm run poc # 38-row two-way gate: the tools/resources wired end-to-end over MCP
 npm run poc -- --json-output poc-chain-evidence.json --sarif-output poc-chain-evidence.sarif
 ```

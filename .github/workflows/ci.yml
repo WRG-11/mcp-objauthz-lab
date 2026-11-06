@@ -97,7 +97,7 @@ jobs:
                              //   4 positives in its fixture.
                              //   2026-10-28: 221->226. mcp-ratelimit-scope-from-forwarded-header is a
                              //   taint rule and reports each counter call: 11 -> 15 in its fixture
-                             //   (+1 a copy of the lab's S11 flow), +1 the quota lookup in the
+                             //   (+1 a copy of the S11 flow of this lab), +1 the quota lookup in the
                              //   header-scope fixture.
                              //   2026-10-28: 219->221. mcp-missing-object-authz-check now reads an
                              //   inline `obj.k !== session.k` check as a check; the +2 are the
@@ -127,7 +127,7 @@ jobs:
                              //   2026-10-28: 132->143. mcp-unscoped-query-object-fetch-csharp
                              //   matched nothing (a $REPO filter applied to branches that never
                              //   bind it). It now also requires the id to come from a public
-                             //   method's parameter. Fires on its 5 existing cases + sync Find, a
+                             //   method parameter. Fires on its 5 existing cases + sync Find, a
                              //   repository FindAsync and a request-body id (8), and on 3 header-
                              //   fixture finders, which also lack a tenant key and are marked (3).
                              //   2026-10-28: 127->132. mcp-authz-scope-from-request-header-swift

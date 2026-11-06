@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The detection-rule fixtures job failed with a bash syntax error: two
+  apostrophes in count comments closed the single-quoted `node -e` script
+  early, the same failure as on 2026-08-22. `ci-hardening` now fails when an
+  apostrophe ends a `node -e '...'` script before its closing line.
 - `mcp-authz-scope-from-request-header` (JavaScript/TypeScript) fired nowhere,
   not even on its own fixture. The header read and the scoping call were two
   positive patterns in one `patterns` block, which semgrep requires to match the

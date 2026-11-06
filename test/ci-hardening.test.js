@@ -159,6 +159,51 @@ test("CI installs node dependencies with npm ci, never npm install", () => {
   assert.ok(blocks.some((b) => /\bnpm\s+ci\b/.test(b.body)), "no npm ci step found");
 });
 
+// ── no apostrophe inside a single-quoted inline script ─────────────────────
+// A `node -e '...'` body is one single-quoted bash string. The first
+// apostrophe inside it, even in a JavaScript comment, closes the string and
+// bash parses the rest as shell. The fixture job failed this way on
+// 2026-08-22 and again on 2026-11-06, both times from a word like "lab's" in
+// a count comment, with no change to semgrep or the rules.
+/**
+ * Every `node -e '` script in a run: body, as { file, line, text, closedAlone }.
+ * `text` runs from the opening quote to the next apostrophe, which is where
+ * bash ends the string. A multi-line script here closes with a quote alone on
+ * its own line, so a closing quote with other text before it on the same line
+ * is an apostrophe that ended the script early.
+ */
+function inlineNodeScripts(block) {
+  const out = [];
+  const re = /\bnode\s+-e\s+'/g;
+  let m;
+  while ((m = re.exec(block.body))) {
+    const start = m.index + m[0].length;
+    const end = block.body.indexOf("'", start);
+    const text = end === -1 ? block.body.slice(start) : block.body.slice(start, end);
+    const lastLine = text.slice(text.lastIndexOf("\n") + 1);
+    const closedAlone = end !== -1 && (!text.includes("\n") || lastLine.trim() === "");
+    out.push({ file: block.file, line: block.line, text, closedAlone });
+  }
+  return out;
+}
+
+test("sanity: the inline-script reader sees the fixture count script in ci.yml", () => {
+  const scripts = workflowFiles.flatMap(runBlocks).flatMap(inlineNodeScripts);
+  assert.ok(
+    scripts.some((s) => s.text.includes("const got = d.results.length")),
+    "expected the node -e fixture count script in ci.yml",
+  );
+});
+
+test("no apostrophe ends a single-quoted node -e script early", () => {
+  const early = actionAndWorkflows
+    .flatMap(runBlocks)
+    .flatMap(inlineNodeScripts)
+    .filter((s) => !s.closedAlone)
+    .map((s) => `${s.file}:${s.line} near "${s.text.slice(s.text.lastIndexOf("\n") + 1).trim()}'"`);
+  assert.deepEqual(early, [], "an apostrophe inside node -e '...' closes the bash string");
+});
+
 // ── least privilege: security-events: write only where SARIF is uploaded ────
 // The dogfood job asked for security-events: write while calling the action
 // with upload-sarif: 'false' -- a write token for the Security tab that no
